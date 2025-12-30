@@ -1,0 +1,25 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Data
+data/
+*.nc
+*.csv
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Brain
+.gemini/
