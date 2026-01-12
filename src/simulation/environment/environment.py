@@ -3,8 +3,9 @@ import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional, Union
 import logging
+from .utils import query_env_buffers
 
-# Configure logging
+# Configure sorting
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,8 @@ class Environment:
         """Load multiple NetCDF files."""
         logger.info(f"Loading environment data from {len(file_paths)} files...")
         self.datasets = []
+        self.bathymetry_map = None # Static bathymetry grid
+
         for fp in file_paths:
             try:
                 ds = xr.open_dataset(fp)
@@ -48,7 +51,27 @@ class Environment:
                     if coord.lower() in ['latitude']: rename_dict[coord] = 'lat'
                     elif coord.lower() in ['longitude']: rename_dict[coord] = 'lon'
                 if rename_dict: ds = ds.rename(rename_dict)
-                # ds.load() <--- Removed to prevent OOM (Lazy Loading)
+                
+                # Check for Depth/Thetao to compute Bathymetry
+                if 'depth' in ds.dims and ('thetao' in ds.data_vars or 'thetao' in ds.keys()):
+                    logger.info(f"Found depth info in {fp}, computing bathymetry map...")
+                    # Use first time step to check valid depths
+                    # Max Valid Depth = Depth where thetao is not null
+                    # Note: Lazy loading might make this slow? Validating...
+                    try:
+                        # Find deepest depth with valid data for each pixel
+                        # ds.depth is the coordinate array
+                        # valid_mask = ds.thetao.isel(time=0).notnull()
+                        # max_depth = ds.depth.where(valid_mask).max(dim='depth')
+                        # Just getting it into memory to avoid repeated heavy I/O
+                        # It's a 2D map, small size (47x871).
+                        sample_slice = ds['thetao'].isel(time=0)
+                        valid_mask = sample_slice.notnull()
+                        self.bathymetry_map = ds['depth'].where(valid_mask).max(dim='depth').compute()
+                        logger.info("Bathymetry map computed successfully.")
+                    except Exception as e:
+                        logger.warning(f"Failed to compute bathymetry: {e}")
+
                 self.datasets.append(ds)
                 logger.info(f"Loaded {fp}")
             except Exception as e:
@@ -123,63 +146,38 @@ class Environment:
                             # logger.warning(f"Error buffering {name}: {e}")
                             pass
                 if found: break
-                
+
+        # Add Static Bathymetry to Buffers
+        if self.bathymetry_map is not None:
+             self.buffers['depth'] = {
+                'data': self.bathymetry_map.values,
+                'lat_min': self.bathymetry_map.lat.min().item(),
+                'lat_step': (self.bathymetry_map.lat.max() - self.bathymetry_map.lat.min()).item() / (self.bathymetry_map.lat.size - 1) if self.bathymetry_map.lat.size > 1 else 1.0,
+                'lon_min': self.bathymetry_map.lon.min().item(),
+                'lon_step': (self.bathymetry_map.lon.max() - self.bathymetry_map.lon.min()).item() / (self.bathymetry_map.lon.size - 1) if self.bathymetry_map.lon.size > 1 else 1.0,
+                'shape': self.bathymetry_map.shape
+             }
     def get_data_at_pos(self, lat: float, lon: float, time: Union[pd.Timestamp, str] = None) -> Dict[str, float]:
         """Fast lookup from buffers."""
         # Ensure buffers are up to date
         if time is not None and time != self.current_time:
             self.update_buffers(time)
             
-        result = self.defaults.copy()
-        result['is_land'] = False # default to False unless detected otherwise
+        # Delegate to stateless util
+        data = query_env_buffers(lat, lon, self.buffers)
         
-        land_votes = []
-        
-        for key, buf in self.buffers.items():
+        # Add Tide (Simple Sine Wave, Period 12.4h)
+        if time:
             try:
-                # Fast Nearest Neighbor Index
-                # idx = (val - min) / step
-                r_idx = int(round((lat - buf['lat_min']) / buf['lat_step']))
-                c_idx = int(round((lon - buf['lon_min']) / buf['lon_step']))
-                
-                # Bounds check
-                if 0 <= r_idx < buf['shape'][0] and 0 <= c_idx < buf['shape'][1]:
-                    val = buf['data'][r_idx, c_idx]
-                    
-                    if np.isnan(val):
-                        # If temperature is NaN, strong vote for land
-                        if key == 'temp':
-                            land_votes.append(True)
-                    else:
-                        result[key] = float(val)
-                        if key == 'temp':
-                            land_votes.append(False)
-                else:
-                    # Out of bounds
-                    pass
-            except Exception:
-                pass
-                
-        # Land Logic: If temp was checked and is NaN -> Land
-        # Or if we have data for 'swh' but checks say NaN?
-        # Simplest: If temp is NaN, it's land.
-        # Check if 'temp' key exists in buffers
-        if 'temp' in self.buffers:
-             # If we successfully updated 'temp', result['temp'] will be real val.
-             # If result['temp'] is still default (18.0) AND we voted True?
-             # My logic above: if not NaN, result[key] is updated.
-             # So if result['temp'] == 18.0 (default) AND land_votes says True?
-             # Wait, land_votes appends True if NaN.
-             if any(land_votes):
-                 result['is_land'] = True
-        
-        result['hsi'] = self.calculate_hsi(result)
-        return result
+                # Timestamp to hours (approx since epoch or just using .value)
+                # We need a continuous scaler.
+                t_val = pd.Timestamp(time).value / (1e9 * 3600) # hours
+                period = 12.4
+                # 0 = Low, 1 = High
+                data['tide'] = 0.5 * (1 + np.sin(2 * np.pi * t_val / period))
+            except:
+                 data['tide'] = 0.5
+        else:
+            data['tide'] = 0.5
 
-    def calculate_hsi(self, features: Dict[str, float]) -> float:
-        """
-        Calculate Habitat Suitability Index (0.0 to 1.0).
-        """
-        chl = features.get('chl', 0.0)
-        hsi = min(chl / 0.5, 1.0)
-        return hsi
+        return data

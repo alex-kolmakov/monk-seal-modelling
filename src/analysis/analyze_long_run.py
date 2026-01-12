@@ -27,7 +27,7 @@ def analyze_long_run(results_file="data/real_long/long_sim_results_stats.csv"):
     # Plot 1: Population Dynamics
     plt.figure(figsize=(12, 6))
     plt.plot(df['date'], df['total_agents'], label='Total Agents', color='blue', linewidth=2)
-    plt.plot(df['date'], df['pup_count'], label='Pups', color='green', linestyle='--', linewidth=1.5)
+
     plt.title(f"Monk Seal Population Dynamics ({basename})")
     plt.xlabel("Date")
     plt.ylabel("Count")

@@ -12,5 +12,7 @@ def update_agent_worker(agent: SealAgent, env_buffers: Dict[str, Any]) -> SealAg
         agent.update_with_buffers(env_buffers)
         return agent
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Error in agent worker {agent.id}: {e}")
         return agent

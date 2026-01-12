@@ -1,5 +1,7 @@
 import os
 import logging
+import random
+import numpy as np
 from src.simulation.simulation import Simulation
 from src.visualization.basic_plot import plot_tracks
 
@@ -8,8 +10,14 @@ logging.basicConfig(level=logging.INFO)
 
 import argparse
 
-def run_long_simulation(duration_days=731, output_file="long_sim_results.csv"):
-    print(f"--- Running Monk Seal Simulation ({duration_days} Days) ---")
+def run_long_simulation(duration_days=731, output_file="long_sim_results.csv", seed=None, num_agents=1):
+    print(f"--- Running Monk Seal Simulation ({duration_days} Days, {num_agents} Agents) ---")
+    
+    # Set random seed for reproducibility
+    if seed is not None:
+        print(f"Setting random seed: {seed}")
+        random.seed(seed)
+        np.random.seed(seed)
     
     # Files
     data_dir = "data/real_long"
@@ -36,12 +44,11 @@ def run_long_simulation(duration_days=731, output_file="long_sim_results.csv"):
     
     # Create Agents
     # Desertas Islands: ~32.5N, 16.5W
-    num_agents = 50 
     sim.create_agents(num_agents=num_agents, start_lat=32.5, start_lon=-16.5)
     
     # Run with Multiprocessing
     import multiprocessing
-    workers = multiprocessing.cpu_count()
+    workers = 1
     print(f"Starting Simulation Loop with {workers} workers...")
     sim.run(max_workers=workers)
     
@@ -62,6 +69,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--days", type=int, default=731, help="Simulation duration in days")
     parser.add_argument("--out", type=str, default="long_sim_results.csv", help="Output filename")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
+    parser.add_argument("--agents", type=int, default=1, help="Number of seal agents")
     args = parser.parse_args()
     
-    run_long_simulation(duration_days=args.days, output_file=args.out)
+    run_long_simulation(duration_days=args.days, output_file=args.out, seed=args.seed, num_agents=args.agents)

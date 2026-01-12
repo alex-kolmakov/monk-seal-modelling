@@ -101,18 +101,7 @@ class Simulation:
             
             active_agents.append(agent)
             
-            # Reproduction (Sequential check output)
-            # Agent state is updated, so if they reproduced, we need to know.
-            # But 'reproduce()' returns a new agent object. 
-            # Our worker currently calls update_with_buffers.
-            # Does it call reproduce? No, run_real/simulation called reproduce() separately.
-            
-            # Issue: reproduction creates a new object. If logic is inside worker, we need to return it.
-            # Current `agent.reproduce` is simple enough to run here in main process?
-            # Yes, reproduce() checks conditions. We can run it sequentially on the updated agents.
-            pup = agent.reproduce()
-            if pup:
-                new_agents.append(pup)
+
             
             # Record History (Sequential)
             # Query env data again for history? Or agent carries it?
@@ -135,13 +124,12 @@ class Simulation:
         # Daily Stats Logging (at Midnight)
         if self.current_time.hour == 0:
             total_agents = len(self.agents)
-            pup_count = sum(1 for a in self.agents if a.age == 0) # Simple proxy for now (or check pup_stage)
+
             avg_energy = sum(a.energy for a in self.agents) / total_agents if total_agents > 0 else 0
             
             stat = {
                 'date': self.current_time,
                 'total_agents': total_agents,
-                'pup_count': pup_count,
                 'avg_energy': avg_energy
             }
             if not hasattr(self, 'daily_stats'): self.daily_stats = []
