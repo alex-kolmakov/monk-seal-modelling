@@ -103,25 +103,6 @@ config = WeatherVisualizationConfig(
 
 ---
 
-## Static Analysis Plots
-
-For non-animated analysis, use the `analyze_long_run` module:
-
-```bash
-# Generate population dynamics and energy trend plots
-uv run python -m src.analysis.analyze_long_run \
-  --results_file data/real_long/simulation_results_stats.csv
-```
-
-### Output Plots
-
-- `population_over_time.png` - Agent survival curves
-- `energy_distribution.png` - Energy level histograms over time
-- `behavioral_states.png` - State distribution pie charts
-- `movement_patterns.png` - Spatial heatmaps of agent positions
-
----
-
 ## Dependencies
 
 Visualization requires:

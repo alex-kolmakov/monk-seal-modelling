@@ -154,10 +154,6 @@ monk-seal-modelling/
 │   ├── 📂 visualization/        # Plotting & animation
 │   │   ├── seal_animator.py     # Seal behavior animations
 │   │   └── weather_visualizer.py # Environmental animations
-│   │
-│   └── 📂 analysis/             # Statistical analysis
-│       ├── analyze_long_run.py  # Population dynamics plots
-│       └── analyze_tidal_data.py
 │
 ├── 📂 data/                     # Data directory (gitignored)
 │   └── 📂 real_long/            # Downloaded NetCDF files
