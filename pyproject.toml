@@ -75,6 +75,5 @@ dev = [
 ]
 
 [tool.pyrefly]
-source_directories = ["."]
+python-interpreter-path = ".venv/bin/python3"
 search_path = ["."]
-python-version = "3.12.0"
