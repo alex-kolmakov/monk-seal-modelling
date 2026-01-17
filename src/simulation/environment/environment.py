@@ -48,8 +48,8 @@ class Environment:
                 ds = xr.open_dataset(fp)
                 rename_dict = {}
                 for coord in ds.coords:
-                    if coord.lower() in ['latitude']: rename_dict[coord] = 'lat'
-                    elif coord.lower() in ['longitude']: rename_dict[coord] = 'lon'
+                    if str(coord).lower() in ['latitude']: rename_dict[coord] = 'lat'
+                    elif str(coord).lower() in ['longitude']: rename_dict[coord] = 'lon'
                 if rename_dict: ds = ds.rename(rename_dict)
                 
                 # Check for Depth/Thetao to compute Bathymetry
@@ -157,7 +157,7 @@ class Environment:
                 'lon_step': (self.bathymetry_map.lon.max() - self.bathymetry_map.lon.min()).item() / (self.bathymetry_map.lon.size - 1) if self.bathymetry_map.lon.size > 1 else 1.0,
                 'shape': self.bathymetry_map.shape
              }
-    def get_data_at_pos(self, lat: float, lon: float, time: Union[pd.Timestamp, str] = None) -> Dict[str, float]:
+    def get_data_at_pos(self, lat: float, lon: float, time: Union[pd.Timestamp, str] | None = None) -> Dict[str, float]:
         """Fast lookup from buffers."""
         # Ensure buffers are up to date
         if time is not None and time != self.current_time:

@@ -1,63 +1,299 @@
+"""
+Copernicus Marine Service API Manager.
+
+This module provides a high-level interface to the Copernicus Marine Service API
+for discovering and downloading ocean data.
+
+Example:
+    >>> from src.data_ingestion.copernicus_manager import CopernicusManager
+    >>> manager = CopernicusManager()
+    >>> datasets = manager.search_datasets(keywords=["IBI", "physics"])
+    >>> manager.download_data(
+    ...     dataset_id="cmems_mod_ibi_phy_my_0.027deg_P1D-m",
+    ...     output_dir="data/",
+    ...     start_date="2023-01-01",
+    ...     end_date="2023-12-31"
+    ... )
+"""
+
+import logging
+import os
+import time
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 
 import copernicusmarine
 import pandas as pd
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
-import os
-import logging
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging
 logger = logging.getLogger(__name__)
 
-class CopernicusManager:
-    def __init__(self):
-        self.username = os.getenv("COPERNICUS_USERNAME")
-        self.password = os.getenv("COPERNICUS_PASSWORD")
-        # We assume credentials might also be stored in ~/.copernicusmarine/
+# Constants
+DEFAULT_RETRY_ATTEMPTS = 3
+DEFAULT_RETRY_DELAY = 1.0  # seconds
+DEFAULT_RETRY_BACKOFF = 2.0  # exponential backoff multiplier
+MIN_LATITUDE = -90.0
+MAX_LATITUDE = 90.0
+MIN_LONGITUDE = -180.0
+MAX_LONGITUDE = 180.0
 
-    def list_datasets(self, search_term: str = None):
+
+# Custom Exceptions
+class CopernicusError(Exception):
+    """Base exception for Copernicus-related errors."""
+    pass
+
+
+class CopernicusAPIError(CopernicusError):
+    """Raised when the Copernicus API returns an error."""
+    pass
+
+
+class DatasetNotFoundError(CopernicusError):
+    """Raised when a requested dataset cannot be found."""
+    pass
+
+
+class InvalidCoordinatesError(CopernicusError):
+    """Raised when geographic coordinates are invalid."""
+    pass
+
+
+class InvalidDateRangeError(CopernicusError):
+    """Raised when date range is invalid."""
+    pass
+
+
+@dataclass
+class RegionBounds:
+    """Geographic region bounds.
+    
+    Attributes:
+        min_lon: Minimum longitude (-180 to 180)
+        max_lon: Maximum longitude (-180 to 180)
+        min_lat: Minimum latitude (-90 to 90)
+        max_lat: Maximum latitude (-90 to 90)
+    """
+    min_lon: float
+    max_lon: float
+    min_lat: float
+    max_lat: float
+    
+    def __post_init__(self) -> None:
+        """Validate coordinates after initialization."""
+        if not (MIN_LONGITUDE <= self.min_lon <= MAX_LONGITUDE):
+            raise InvalidCoordinatesError(
+                f"min_lon must be between {MIN_LONGITUDE} and {MAX_LONGITUDE}"
+            )
+        if not (MIN_LONGITUDE <= self.max_lon <= MAX_LONGITUDE):
+            raise InvalidCoordinatesError(
+                f"max_lon must be between {MIN_LONGITUDE} and {MAX_LONGITUDE}"
+            )
+        if not (MIN_LATITUDE <= self.min_lat <= MAX_LATITUDE):
+            raise InvalidCoordinatesError(
+                f"min_lat must be between {MIN_LATITUDE} and {MAX_LATITUDE}"
+            )
+        if not (MIN_LATITUDE <= self.max_lat <= MAX_LATITUDE):
+            raise InvalidCoordinatesError(
+                f"max_lat must be between {MIN_LATITUDE} and {MAX_LATITUDE}"
+            )
+        if self.min_lon >= self.max_lon:
+            raise InvalidCoordinatesError("min_lon must be less than max_lon")
+        if self.min_lat >= self.max_lat:
+            raise InvalidCoordinatesError("min_lat must be less than max_lat")
+
+
+class CopernicusManager:
+    """Manager for interacting with the Copernicus Marine Service API.
+    
+    This class provides methods for discovering datasets, retrieving metadata,
+    and downloading ocean data from the Copernicus Marine Service.
+    
+    Attributes:
+        username: Copernicus username (from environment or credentials file)
+        password: Copernicus password (from environment or credentials file)
+    
+    Example:
+        >>> manager = CopernicusManager()
+        >>> results = manager.search_datasets(keywords=["temperature", "IBI"])
+        >>> print(f"Found {len(results)} datasets")
+    """
+    
+    def __init__(
+        self,
+        username: Optional[str] = None,
+        password: Optional[str] = None
+    ) -> None:
+        """Initialize the Copernicus Manager.
+        
+        Args:
+            username: Copernicus username. If None, uses COPERNICUS_USERNAME env var.
+            password: Copernicus password. If None, uses COPERNICUS_PASSWORD env var.
         """
-        List datasets from Copernicus Marine Service matching the search term.
+        self.username = username or os.getenv("COPERNICUS_USERNAME")
+        self.password = password or os.getenv("COPERNICUS_PASSWORD")
+        logger.debug("CopernicusManager initialized")
+    
+    def _retry_with_backoff(
+        self,
+        func: Callable,
+        *args: Any,
+        max_attempts: int = DEFAULT_RETRY_ATTEMPTS,
+        initial_delay: float = DEFAULT_RETRY_DELAY,
+        backoff: float = DEFAULT_RETRY_BACKOFF,
+        **kwargs: Any
+    ) -> Any:
+        """Retry a function with exponential backoff.
+        
+        Args:
+            func: Function to retry
+            *args: Positional arguments for func
+            max_attempts: Maximum number of retry attempts
+            initial_delay: Initial delay between retries in seconds
+            backoff: Multiplier for delay after each attempt
+            **kwargs: Keyword arguments for func
+        
+        Returns:
+            Result of successful function call
+        
+        Raises:
+            CopernicusAPIError: If all retry attempts fail
         """
-        logger.info(f"Searching for datasets with term: {search_term}")
+        delay = initial_delay
+        last_exception = None
+        
+        for attempt in range(1, max_attempts + 1):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                last_exception = e
+                if attempt < max_attempts:
+                    logger.warning(
+                        f"Attempt {attempt}/{max_attempts} failed: {e}. "
+                        f"Retrying in {delay:.1f}s..."
+                    )
+                    time.sleep(delay)
+                    delay *= backoff
+                else:
+                    logger.error(f"All {max_attempts} attempts failed")
+        
+        raise CopernicusAPIError(
+            f"Failed after {max_attempts} attempts: {last_exception}"
+        ) from last_exception
+    
+    @staticmethod
+    def validate_coordinates(
+        min_lon: float,
+        max_lon: float,
+        min_lat: float,
+        max_lat: float
+    ) -> None:
+        """Validate geographic coordinates.
+        
+        Args:
+            min_lon: Minimum longitude
+            max_lon: Maximum longitude
+            min_lat: Minimum latitude
+            max_lat: Maximum latitude
+        
+        Raises:
+            InvalidCoordinatesError: If coordinates are invalid
+        """
+        # This will raise InvalidCoordinatesError if invalid
+        RegionBounds(
+            min_lon=min_lon,
+            max_lon=max_lon,
+            min_lat=min_lat,
+            max_lat=max_lat
+        )
+    
+    @staticmethod
+    def validate_date_range(start_date: str, end_date: str) -> None:
+        """Validate date range.
+        
+        Args:
+            start_date: Start date in ISO format (YYYY-MM-DD)
+            end_date: End date in ISO format (YYYY-MM-DD)
+        
+        Raises:
+            InvalidDateRangeError: If date range is invalid
+        """
         try:
-            # properly use 'contains' filter if provided
+            start = datetime.fromisoformat(start_date)
+            end = datetime.fromisoformat(end_date)
+        except ValueError as e:
+            raise InvalidDateRangeError(
+                f"Invalid date format. Use YYYY-MM-DD: {e}"
+            ) from e
+        
+        if start >= end:
+            raise InvalidDateRangeError(
+                f"start_date ({start_date}) must be before end_date ({end_date})"
+            )
+    
+    def list_products(self, search_term: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List products from Copernicus Marine Service.
+        
+        Args:
+            search_term: Optional search term to filter products
+        
+        Returns:
+            List of product dictionaries with title, product_id, and description
+        
+        Example:
+            >>> manager = CopernicusManager()
+            >>> products = manager.list_products(search_term="IBI")
+            >>> print(products[0]['title'])
+        """
+        logger.info(f"Listing products with search term: {search_term}")
+        
+        def _list() -> List[Dict[str, Any]]:
             contains = [search_term] if search_term else None
-            catalogue = copernicusmarine.describe(contains=contains)
+            catalogue = copernicusmarine.describe(
+                contains=contains,
+                disable_progress_bar=True
+            )
             
             results = []
             if hasattr(catalogue, 'products'):
-                for p in catalogue.products:
-                    # Convert object to dict for easier downstream handling
-                    ds_dict = {
-                        'title': getattr(p, 'title', ''),
-                        'product_id': getattr(p, 'product_id', ''),
-                        'description': getattr(p, 'description', ''),
-                        # Add other relevant fields if needed
-                    }
-                    results.append(ds_dict)
-            
-            # If search term was not sent to API (e.g. if we want custom filtering), filter here.
-            # But describe(contains=...) does it.
+                for product in catalogue.products:
+                    results.append({
+                        'title': getattr(product, 'title', ''),
+                        'product_id': getattr(product, 'product_id', ''),
+                        'description': getattr(product, 'description', ''),
+                    })
             
             return results
-        except Exception as e:
-            logger.error(f"Error listing datasets: {e}")
+        
+        try:
+            return self._retry_with_backoff(_list)
+        except CopernicusAPIError as e:
+            logger.error(f"Failed to list products: {e}")
             return []
-
+    
     def get_product_metadata(self, product_id: str) -> Dict[str, Any]:
-        """
-        Get comprehensive metadata for a specific product.
+        """Get comprehensive metadata for a specific product.
         
         Args:
             product_id: The Copernicus product ID (e.g., 'IBI_MULTIYEAR_PHY_005_002')
-            
+        
         Returns:
-            Dictionary containing product metadata including title, description, 
+            Dictionary containing product metadata including title, description,
             DOI, keywords, and list of datasets
+        
+        Raises:
+            DatasetNotFoundError: If product is not found
+        
+        Example:
+            >>> manager = CopernicusManager()
+            >>> metadata = manager.get_product_metadata("IBI_MULTIYEAR_PHY_005_002")
+            >>> print(metadata['title'])
         """
         logger.info(f"Fetching metadata for product: {product_id}")
-        try:
+        
+        def _get_metadata() -> Dict[str, Any]:
             catalogue = copernicusmarine.describe(
                 product_id=product_id,
                 disable_progress_bar=True
@@ -87,38 +323,38 @@ class CopernicusManager:
                         ]
                     }
             
-            logger.warning(f"No metadata found for product: {product_id}")
-            return {}
-            
-        except Exception as e:
-            logger.error(f"Error fetching product metadata: {e}")
-            return {}
-
+            raise DatasetNotFoundError(f"Product not found: {product_id}")
+        
+        return self._retry_with_backoff(_get_metadata)
+    
     def get_dataset_info(self, dataset_id: str) -> Dict[str, Any]:
-        """
-        Get comprehensive information about a specific dataset.
+        """Get comprehensive information about a specific dataset.
         
         Args:
             dataset_id: The dataset ID (e.g., 'cmems_mod_ibi_phy-cur_my_0.027deg_P1D-m')
-            
+        
         Returns:
             Dictionary containing dataset metadata, coverage, and variables
+        
+        Raises:
+            DatasetNotFoundError: If dataset is not found
+        
+        Example:
+            >>> manager = CopernicusManager()
+            >>> info = manager.get_dataset_info("cmems_mod_ibi_phy_my_0.027deg_P1D-m")
+            >>> print(info['coverage']['bbox'])
         """
         logger.info(f"Fetching info for dataset: {dataset_id}")
         
-        # Search through all products to find this dataset
-        try:
-            # Use a broad search to find the dataset
+        def _get_info() -> Dict[str, Any]:
             catalogue = copernicusmarine.describe(disable_progress_bar=True)
             
             if hasattr(catalogue, 'model_dump'):
                 data = catalogue.model_dump()
                 
-                # Search through all products and datasets
                 for product in data.get('products', []):
                     for dataset in product.get('datasets', []):
                         if dataset.get('dataset_id') == dataset_id:
-                            # Found it! Extract comprehensive info
                             coverage = self._extract_coverage(dataset)
                             variables = self._extract_variables(dataset)
                             
@@ -127,63 +363,75 @@ class CopernicusManager:
                                 'dataset_name': dataset.get('dataset_name'),
                                 'product_id': product.get('product_id'),
                                 'product_title': product.get('title'),
+                                'product_description': product.get('description'),
                                 'doi': dataset.get('digital_object_identifier'),
                                 'coverage': coverage,
                                 'variables': variables
                             }
             
-            logger.warning(f"Dataset not found: {dataset_id}")
-            return {}
-            
-        except Exception as e:
-            logger.error(f"Error fetching dataset info: {e}")
-            return {}
-
+            raise DatasetNotFoundError(f"Dataset not found: {dataset_id}")
+        
+        return self._retry_with_backoff(_get_info)
+    
     def get_dataset_coverage(self, dataset_id: str) -> Dict[str, Any]:
-        """
-        Get spatial and temporal coverage information for a dataset.
+        """Get spatial and temporal coverage information for a dataset.
         
         Args:
             dataset_id: The dataset ID
-            
+        
         Returns:
             Dictionary with latitude, longitude, time, and depth coverage
+        
+        Example:
+            >>> manager = CopernicusManager()
+            >>> coverage = manager.get_dataset_coverage("cmems_mod_ibi_phy_my_0.027deg_P1D-m")
+            >>> print(coverage['bbox'])
         """
         info = self.get_dataset_info(dataset_id)
         return info.get('coverage', {})
-
+    
     def get_dataset_variables(self, dataset_id: str) -> List[Dict[str, Any]]:
-        """
-        Get list of available variables in a dataset.
+        """Get list of available variables in a dataset.
         
         Args:
             dataset_id: The dataset ID
-            
+        
         Returns:
             List of dictionaries containing variable metadata
+        
+        Example:
+            >>> manager = CopernicusManager()
+            >>> variables = manager.get_dataset_variables("cmems_mod_ibi_phy_my_0.027deg_P1D-m")
+            >>> print([v['short_name'] for v in variables])
         """
         info = self.get_dataset_info(dataset_id)
         return info.get('variables', [])
-
-    def search_datasets_advanced(
-        self, 
-        keywords: List[str] = None,
-        region: Dict[str, float] = None
+    
+    def search_datasets(
+        self,
+        keywords: Optional[List[str]] = None,
+        region: Optional[RegionBounds] = None,
+        progress_callback: Optional[Callable[[int, int, str], None]] = None
     ) -> List[Dict[str, Any]]:
-        """
-        Advanced search for datasets with filtering.
+        """Search for datasets with filtering.
         
         Args:
             keywords: List of keywords to search for
-            region: Dictionary with 'min_lon', 'max_lon', 'min_lat', 'max_lat'
-            
+            region: Geographic region bounds for filtering
+            progress_callback: Optional callback(current, total, message) for progress updates
+        
         Returns:
             List of matching datasets with metadata
-        """
-        logger.info(f"Advanced search with keywords: {keywords}, region: {region}")
         
-        try:
-            # Build search query
+        Example:
+            >>> manager = CopernicusManager()
+            >>> region = RegionBounds(min_lon=-17.5, max_lon=-16.0, min_lat=32.2, max_lat=33.5)
+            >>> results = manager.search_datasets(keywords=["physics"], region=region)
+            >>> print(f"Found {len(results)} datasets")
+        """
+        logger.info(f"Searching datasets with keywords: {keywords}, region: {region}")
+        
+        def _search() -> List[Dict[str, Any]]:
             contains = keywords if keywords else None
             catalogue = copernicusmarine.describe(
                 contains=contains,
@@ -194,9 +442,24 @@ class CopernicusManager:
             
             if hasattr(catalogue, 'model_dump'):
                 data = catalogue.model_dump()
+                products = data.get('products', [])
                 
-                for product in data.get('products', []):
+                total_datasets = sum(
+                    len(p.get('datasets', [])) for p in products
+                )
+                current = 0
+                
+                for product in products:
                     for dataset in product.get('datasets', []):
+                        current += 1
+                        
+                        if progress_callback:
+                            progress_callback(
+                                current,
+                                total_datasets,
+                                f"Processing {dataset.get('dataset_id', 'unknown')}"
+                            )
+                        
                         dataset_info = {
                             'dataset_id': dataset.get('dataset_id'),
                             'dataset_name': dataset.get('dataset_name'),
@@ -204,9 +467,12 @@ class CopernicusManager:
                             'product_title': product.get('title')
                         }
                         
-                        # Extract coverage for filtering
                         coverage = self._extract_coverage(dataset)
                         dataset_info['coverage'] = coverage
+                        
+                        # Extract variables
+                        variables = self._extract_variables(dataset)
+                        dataset_info['variables'] = variables
                         
                         # Filter by region if specified
                         if region:
@@ -217,25 +483,113 @@ class CopernicusManager:
             
             logger.info(f"Found {len(results)} matching datasets")
             return results
-            
-        except Exception as e:
-            logger.error(f"Error in advanced search: {e}")
-            return []
-
-    def _extract_coverage(self, dataset: Dict) -> Dict[str, Any]:
+        
+        return self._retry_with_backoff(_search)
+    
+    def download_data(
+        self,
+        dataset_id: str,
+        output_dir: str | Path,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        variables: Optional[List[str]] = None,
+        minimum_longitude: Optional[float] = None,
+        maximum_longitude: Optional[float] = None,
+        minimum_latitude: Optional[float] = None,
+        maximum_latitude: Optional[float] = None,
+        overwrite: bool = True
+    ) -> bool:
+        """Download subset of data from a dataset.
+        
+        Args:
+            dataset_id: The dataset ID to download
+            output_dir: Directory to save downloaded files
+            start_date: Start date in ISO format (YYYY-MM-DD)
+            end_date: End date in ISO format (YYYY-MM-DD)
+            variables: List of variable names to download
+            minimum_longitude: Minimum longitude for spatial subset
+            maximum_longitude: Maximum longitude for spatial subset
+            minimum_latitude: Minimum latitude for spatial subset
+            maximum_latitude: Maximum latitude for spatial subset
+            overwrite: Whether to overwrite existing files
+        
+        Returns:
+            True if download successful, False otherwise
+        
+        Raises:
+            InvalidCoordinatesError: If coordinates are invalid
+            InvalidDateRangeError: If date range is invalid
+        
+        Example:
+            >>> manager = CopernicusManager()
+            >>> success = manager.download_data(
+            ...     dataset_id="cmems_mod_ibi_phy_my_0.027deg_P1D-m",
+            ...     output_dir="data/",
+            ...     start_date="2023-01-01",
+            ...     end_date="2023-12-31",
+            ...     minimum_longitude=-17.5,
+            ...     maximum_longitude=-16.0,
+            ...     minimum_latitude=32.2,
+            ...     maximum_latitude=33.5
+            ... )
         """
-        Extract coverage information from dataset metadata.
+        logger.info(f"Downloading {dataset_id} to {output_dir}")
+        
+        # Validate inputs
+        if start_date and end_date:
+            self.validate_date_range(start_date, end_date)
+        
+        if all([minimum_longitude, maximum_longitude, minimum_latitude, maximum_latitude]):
+            # Verify they are not None for type checker
+            assert minimum_longitude is not None
+            assert maximum_longitude is not None
+            assert minimum_latitude is not None
+            assert maximum_latitude is not None
+            
+            self.validate_coordinates(
+                float(minimum_longitude),
+                float(maximum_longitude),
+                float(minimum_latitude),
+                float(maximum_latitude)
+            )
+        
+        # Create output directory
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        def _download() -> bool:
+            copernicusmarine.subset(
+                dataset_id=dataset_id,
+                output_directory=str(output_path),
+                start_datetime=start_date,
+                end_datetime=end_date,
+                variables=variables,
+                minimum_longitude=minimum_longitude,
+                maximum_longitude=maximum_longitude,
+                minimum_latitude=minimum_latitude,
+                maximum_latitude=maximum_latitude,
+                overwrite=overwrite
+            )
+            return True
+        
+        try:
+            return self._retry_with_backoff(_download)
+        except CopernicusAPIError as e:
+            logger.error(f"Failed to download data: {e}")
+            return False
+    
+    def _extract_coverage(self, dataset: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract coverage information from dataset metadata.
         
         Args:
             dataset: Dataset dictionary from catalogue
-            
+        
         Returns:
-            Dictionary with coverage information
+            Dictionary with coverage information (bbox, time, depth, etc.)
         """
-        coverage = {}
+        coverage: Dict[str, Any] = {}
         
         try:
-            # Get the first version and part
             versions = dataset.get('versions', [])
             if not versions:
                 return coverage
@@ -246,7 +600,7 @@ class CopernicusManager:
             
             services = parts[0].get('services', [])
             
-            # Prefer 'arco-geo-series' service for most complete metadata
+            # Prefer 'arco-geo-series' service
             target_service = None
             for service in services:
                 if service.get('service_name') == 'arco-geo-series':
@@ -263,7 +617,6 @@ class CopernicusManager:
             if not target_service:
                 return coverage
             
-            # Extract from first variable (coverage is same for all)
             variables = target_service.get('variables', [])
             if not variables:
                 return coverage
@@ -300,7 +653,6 @@ class CopernicusManager:
                         'unit': coord.get('coordinate_unit')
                     }
                 elif coord_id == 'time':
-                    # Convert milliseconds to datetime
                     min_ms = coord.get('minimum_value')
                     max_ms = coord.get('maximum_value')
                     step_ms = coord.get('step')
@@ -325,16 +677,15 @@ class CopernicusManager:
             logger.warning(f"Error extracting coverage: {e}")
         
         return coverage
-
-    def _extract_variables(self, dataset: Dict) -> List[Dict[str, Any]]:
-        """
-        Extract variable information from dataset metadata.
+    
+    def _extract_variables(self, dataset: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract variable information from dataset metadata.
         
         Args:
             dataset: Dataset dictionary from catalogue
-            
+        
         Returns:
-            List of variable dictionaries
+            List of variable dictionaries with short_name, standard_name, units
         """
         variables = []
         
@@ -349,7 +700,6 @@ class CopernicusManager:
             
             services = parts[0].get('services', [])
             
-            # Get variables from first service
             for service in services:
                 service_vars = service.get('variables', [])
                 if service_vars:
@@ -360,66 +710,38 @@ class CopernicusManager:
                             'units': var.get('units'),
                             'bbox': var.get('bbox')
                         })
-                    break  # Use first service with variables
+                    break
         
         except Exception as e:
             logger.warning(f"Error extracting variables: {e}")
         
         return variables
-
+    
     def _check_region_overlap(
-        self, 
-        coverage: Dict[str, Any], 
-        region: Dict[str, float]
+        self,
+        coverage: Dict[str, Any],
+        region: RegionBounds
     ) -> bool:
-        """
-        Check if dataset coverage overlaps with specified region.
+        """Check if dataset coverage overlaps with specified region.
         
         Args:
             coverage: Dataset coverage dictionary
-            region: Region bounds (min_lon, max_lon, min_lat, max_lat)
-            
+            region: Region bounds to check against
+        
         Returns:
-            True if there is overlap
+            True if there is overlap, False otherwise
         """
         bbox = coverage.get('bbox')
         if not bbox:
             return False
         
-        # Check for overlap
         lon_overlap = (
-            bbox['lon_min'] <= region['max_lon'] and
-            bbox['lon_max'] >= region['min_lon']
+            bbox['lon_min'] <= region.max_lon and
+            bbox['lon_max'] >= region.min_lon
         )
         lat_overlap = (
-            bbox['lat_min'] <= region['max_lat'] and
-            bbox['lat_max'] >= region['min_lat']
+            bbox['lat_min'] <= region.max_lat and
+            bbox['lat_max'] >= region.min_lat
         )
         
         return lon_overlap and lat_overlap
-
-    def download_data(self, dataset_id: str, output_dir: str, 
-                      start_date: str = None, end_date: str = None,
-                      variables: list = None,
-                      minimum_longitude: float = None, maximum_longitude: float = None,
-                      minimum_latitude: float = None, maximum_latitude: float = None,
-                      overwrite: bool = True):
-        """
-        Download subset of data.
-        """
-        logger.info(f"Downloading {dataset_id} to {output_dir}")
-        try:
-            copernicusmarine.subset(
-                dataset_id=dataset_id,
-                output_directory=output_dir,
-                start_datetime=start_date,
-                end_datetime=end_date,
-                variables=variables,
-                minimum_latitude=minimum_latitude,
-                maximum_latitude=maximum_latitude,
-                overwrite=overwrite
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Error downloading data: {e}")
-            return False

@@ -1,49 +1,121 @@
 """
-Interactive dataset discovery tool for Copernicus Marine Service.
+Dataset discovery functionality for Copernicus Marine Service.
 
-This tool allows you to:
-1. Search for datasets by keyword
-2. View detailed metadata (description, coverage, variables)
-3. Filter by geographic region
-4. Export results to JSON
-
-Usage:
-    # Search for datasets
-    python -m src.data_ingestion.discover_datasets --search "wave IBI"
-    
-    # Search with region filter (Madeira)
-    python -m src.data_ingestion.discover_datasets --search "physics" --region madeira
-    
-    # Get info for specific dataset
-    python -m src.data_ingestion.discover_datasets --dataset-id "cmems_mod_ibi_phy-cur_my_0.027deg_P1D-m"
-    
-    # Export results
-    python -m src.data_ingestion.discover_datasets --search "IBI" --export results.json
+This module provides both a programmatic API and CLI for discovering datasets.
 """
 
 import argparse
 import json
-from typing import Dict, List
-from src.data_ingestion.copernicus_manager import CopernicusManager
-from pprint import pprint
+import logging
+from pathlib import Path
+from typing import Dict, List, Optional
+
+from src.data_ingestion.copernicus_manager import (
+    CopernicusManager,
+    RegionBounds,
+    DatasetNotFoundError
+)
+
+logger = logging.getLogger(__name__)
 
 # Predefined regions
-REGIONS = {
-    'madeira': {
-        'min_lon': -17.5,
-        'max_lon': -16.0,
-        'min_lat': 32.2,
-        'max_lat': 33.5,
-        'name': 'Madeira Archipelago'
-    },
-    'ibi': {
-        'min_lon': -19.0,
-        'max_lon': 5.0,
-        'min_lat': 26.0,
-        'max_lat': 56.0,
-        'name': 'Iberia-Biscay-Ireland'
-    }
+KNOWN_REGIONS = {
+    'madeira': RegionBounds(min_lon=-17.5, max_lon=-16.0, min_lat=32.2, max_lat=33.5),
+    'ibi': RegionBounds(min_lon=-19.0, max_lon=5.0, min_lat=26.0, max_lat=56.0),
+    'mediterranean': RegionBounds(min_lon=-6.0, max_lon=36.0, min_lat=30.0, max_lat=46.0),
 }
+
+
+class DatasetDiscovery:
+    """Business logic for dataset discovery.
+    
+    Example:
+        >>> discovery = DatasetDiscovery()
+        >>> results = discovery.search(keywords=["IBI", "physics"])
+        >>> print(f"Found {len(results)} datasets")
+    """
+    
+    def __init__(self, manager: Optional[CopernicusManager] = None):
+        """Initialize dataset discovery.
+        
+        Args:
+            manager: Optional CopernicusManager instance. Creates new one if None.
+        """
+        self.manager = manager or CopernicusManager()
+    
+    def search(
+        self,
+        keywords: Optional[List[str]] = None,
+        region_name: Optional[str] = None,
+        region_bounds: Optional[RegionBounds] = None
+    ) -> List[Dict]:
+        """Search for datasets.
+        
+        Args:
+            keywords: List of search keywords
+            region_name: Name of predefined region ('madeira', 'ibi', 'mediterranean')
+            region_bounds: Custom region bounds
+        
+        Returns:
+            List of dataset dictionaries
+        
+        Raises:
+            ValueError: If region_name is invalid
+        """
+        # Resolve region
+        region = None
+        if region_name:
+            if region_name.lower() not in KNOWN_REGIONS:
+                raise ValueError(
+                    f"Unknown region: {region_name}. "
+                    f"Valid regions: {list(KNOWN_REGIONS.keys())}"
+                )
+            region = KNOWN_REGIONS[region_name.lower()]
+        elif region_bounds:
+            region = region_bounds
+        
+        return self.manager.search_datasets(keywords=keywords, region=region)
+    
+    def get_dataset_details(self, dataset_id: str) -> Dict:
+        """Get detailed information about a dataset.
+        
+        Args:
+            dataset_id: The dataset ID
+        
+        Returns:
+            Dataset information dictionary
+        
+        Raises:
+            DatasetNotFoundError: If dataset not found
+        """
+        return self.manager.get_dataset_info(dataset_id)
+    
+    def export_results(
+        self,
+        results: List[Dict],
+        output_file: str | Path,
+        format: str = 'json'
+    ) -> None:
+        """Export search results to file.
+        
+        Args:
+            results: List of dataset dictionaries
+            output_file: Path to output file
+            format: Output format ('json' or 'csv')
+        
+        Raises:
+            ValueError: If format is not supported
+        """
+        output_path = Path(output_file)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        if format == 'json':
+            with open(output_path, 'w') as f:
+                json.dump(results, f, indent=2)
+            logger.info(f"Exported {len(results)} results to {output_path}")
+        else:
+            raise ValueError(f"Unsupported format: {format}")
+
 
 def format_coverage(coverage: Dict) -> str:
     """Format coverage information for display."""
@@ -60,17 +132,18 @@ def format_coverage(coverage: Dict) -> str:
         lines.append(f"  Time Range:")
         lines.append(f"    Start: {time_info['min']}")
         lines.append(f"    End:   {time_info['max']}")
-        if time_info['step_days']:
+        if time_info.get('step_days'):
             lines.append(f"    Resolution: {time_info['step_days']:.1f} days")
     
     if 'depth' in coverage:
         depth_info = coverage['depth']
         lines.append(f"  Depth:")
         lines.append(f"    Levels: {depth_info['levels']}")
-        if depth_info['min'] is not None and depth_info['max'] is not None:
+        if depth_info.get('min') is not None and depth_info.get('max') is not None:
             lines.append(f"    Range: {depth_info['min']:.1f}m to {depth_info['max']:.1f}m")
     
     return "\n".join(lines)
+
 
 def format_variables(variables: List[Dict]) -> str:
     """Format variable list for display."""
@@ -79,196 +152,136 @@ def format_variables(variables: List[Dict]) -> str:
         name = var['short_name']
         std_name = var.get('standard_name', 'N/A')
         units = var.get('units', 'N/A')
-        lines.append(f"    • {name}: {std_name} ({units})")
+        lines.append(f"  - {name}")
+        lines.append(f"    Standard Name: {std_name}")
+        lines.append(f"    Units: {units}")
     return "\n".join(lines)
 
-def display_dataset_info(info: Dict, detailed: bool = True):
-    """Display dataset information in a readable format."""
-    print("\n" + "="*80)
-    print(f"Dataset: {info['dataset_id']}")
-    print("="*80)
-    print(f"Name: {info.get('dataset_name', 'N/A')}")
-    print(f"Product: {info.get('product_title', 'N/A')} ({info.get('product_id', 'N/A')})")
-    
-    if info.get('doi'):
-        print(f"DOI: {info['doi']}")
-    
-    if detailed and 'coverage' in info:
-        print("\nCoverage:")
-        print(format_coverage(info['coverage']))
-    
-    if detailed and 'variables' in info:
-        print(f"\nVariables ({len(info['variables'])}):")
-        print(format_variables(info['variables']))
-    
-    print()
 
-def search_datasets(args):
-    """Search for datasets."""
-    manager = CopernicusManager()
-    
-    # Parse keywords
-    keywords = args.search.split() if args.search else None
-    
-    # Get region
-    region = None
-    if args.region:
-        if args.region.lower() in REGIONS:
-            region = REGIONS[args.region.lower()]
-            print(f"Filtering by region: {region['name']}")
-        else:
-            print(f"Unknown region: {args.region}")
-            print(f"Available regions: {', '.join(REGIONS.keys())}")
-            return
-    
-    print(f"Searching for datasets with keywords: {keywords}")
-    print()
-    
-    # Search
-    results = manager.search_datasets_advanced(keywords=keywords, region=region)
-    
-    print(f"Found {len(results)} datasets")
-    print()
-    
-    # Display results
-    for i, ds in enumerate(results[:args.limit], 1):
-        print(f"{i}. {ds['dataset_id']}")
-        print(f"   {ds.get('dataset_name', 'N/A')}")
-        print(f"   Product: {ds.get('product_title', 'N/A')}")
-        
-        if 'coverage' in ds and 'bbox' in ds['coverage']:
-            bbox = ds['coverage']['bbox']
-            print(f"   Coverage: {bbox['lon_min']:.1f}°E-{bbox['lon_max']:.1f}°E, {bbox['lat_min']:.1f}°N-{bbox['lat_max']:.1f}°N")
-        
-        print()
-    
-    if len(results) > args.limit:
-        print(f"... and {len(results) - args.limit} more datasets")
-        print(f"Use --limit to show more results")
-    
-    # Export if requested
-    if args.export:
-        with open(args.export, 'w') as f:
-            json.dump(results, f, indent=2, default=str)
-        print(f"\nResults exported to: {args.export}")
-
-def get_dataset_info_cmd(args):
-    """Get detailed information about a specific dataset."""
-    manager = CopernicusManager()
-    
-    print(f"Fetching information for: {args.dataset_id}")
-    info = manager.get_dataset_info(args.dataset_id)
-    
-    if not info:
-        print(f"Dataset not found: {args.dataset_id}")
-        return
-    
-    display_dataset_info(info, detailed=True)
-    
-    # Export if requested
-    if args.export:
-        with open(args.export, 'w') as f:
-            json.dump(info, f, indent=2, default=str)
-        print(f"Information exported to: {args.export}")
-
-def get_product_info(args):
-    """Get information about a product."""
-    manager = CopernicusManager()
-    
-    print(f"Fetching information for product: {args.product_id}")
-    metadata = manager.get_product_metadata(args.product_id)
-    
-    if not metadata:
-        print(f"Product not found: {args.product_id}")
-        return
-    
-    print("\n" + "="*80)
-    print(f"Product: {metadata['product_id']}")
-    print("="*80)
-    print(f"Title: {metadata.get('title', 'N/A')}")
-    print(f"DOI: {metadata.get('doi', 'N/A')}")
-    print(f"Processing Level: {metadata.get('processing_level', 'N/A')}")
-    print(f"Production Center: {metadata.get('production_center', 'N/A')}")
-    
-    if metadata.get('description'):
-        print(f"\nDescription:")
-        print(f"  {metadata['description'][:300]}...")
-    
-    if metadata.get('keywords'):
-        print(f"\nKeywords:")
-        for kw in metadata['keywords'][:10]:
-            print(f"  • {kw}")
-        if len(metadata['keywords']) > 10:
-            print(f"  ... and {len(metadata['keywords']) - 10} more")
-    
-    if metadata.get('datasets'):
-        print(f"\nDatasets ({len(metadata['datasets'])}):")
-        for ds in metadata['datasets'][:10]:
-            print(f"  • {ds['dataset_id']}")
-            print(f"    {ds.get('dataset_name', 'N/A')}")
-        if len(metadata['datasets']) > 10:
-            print(f"  ... and {len(metadata['datasets']) - 10} more")
-    
-    print()
-    
-    # Export if requested
-    if args.export:
-        with open(args.export, 'w') as f:
-            json.dump(metadata, f, indent=2, default=str)
-        print(f"Information exported to: {args.export}")
-
-def main():
+def main() -> int:
+    """CLI entry point for dataset discovery."""
     parser = argparse.ArgumentParser(
-        description='Discover and explore Copernicus Marine datasets',
+        description="Discover Copernicus Marine datasets",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__
+        epilog="""
+Examples:
+  # Search for datasets
+  %(prog)s --search "wave IBI"
+  
+  # Search with region filter
+  %(prog)s --search "physics" --region madeira
+  
+  # Get dataset details
+  %(prog)s --dataset-id "cmems_mod_ibi_phy_my_0.027deg_P1D-m"
+  
+  # Export results
+  %(prog)s --search "IBI" --export results.json
+        """
     )
     
-    subparsers = parser.add_subparsers(dest='command', help='Command to execute')
-    
-    # Search command
-    search_parser = subparsers.add_parser('search', help='Search for datasets')
-    search_parser.add_argument('--search', '-s', type=str, help='Search keywords (space-separated)')
-    search_parser.add_argument('--region', '-r', type=str, help='Region filter (madeira, ibi)')
-    search_parser.add_argument('--limit', '-l', type=int, default=10, help='Maximum results to display')
-    search_parser.add_argument('--export', '-e', type=str, help='Export results to JSON file')
-    
-    # Dataset info command
-    dataset_parser = subparsers.add_parser('dataset', help='Get dataset information')
-    dataset_parser.add_argument('dataset_id', type=str, help='Dataset ID')
-    dataset_parser.add_argument('--export', '-e', type=str, help='Export to JSON file')
-    
-    # Product info command
-    product_parser = subparsers.add_parser('product', help='Get product information')
-    product_parser.add_argument('product_id', type=str, help='Product ID')
-    product_parser.add_argument('--export', '-e', type=str, help='Export to JSON file')
-    
-    # For backward compatibility, support direct arguments
-    parser.add_argument('--search', type=str, help='Search keywords (deprecated, use search command)')
-    parser.add_argument('--dataset-id', type=str, help='Dataset ID (deprecated, use dataset command)')
-    parser.add_argument('--product-id', type=str, help='Product ID (deprecated, use product command)')
-    parser.add_argument('--region', type=str, help='Region filter')
-    parser.add_argument('--limit', type=int, default=10, help='Maximum results')
-    parser.add_argument('--export', type=str, help='Export to JSON file')
+    parser.add_argument(
+        '--search',
+        type=str,
+        help='Search keywords (space-separated)'
+    )
+    parser.add_argument(
+        '--region',
+        type=str,
+        choices=list(KNOWN_REGIONS.keys()),
+        help='Filter by predefined region'
+    )
+    parser.add_argument(
+        '--dataset-id',
+        type=str,
+        help='Get details for specific dataset ID'
+    )
+    parser.add_argument(
+        '--export',
+        type=str,
+        help='Export results to JSON file'
+    )
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        help='Enable verbose logging'
+    )
     
     args = parser.parse_args()
     
-    # Handle subcommands
-    if args.command == 'search':
-        search_datasets(args)
-    elif args.command == 'dataset':
-        get_dataset_info_cmd(args)
-    elif args.command == 'product':
-        get_product_info(args)
-    # Backward compatibility
-    elif args.dataset_id:
-        get_dataset_info_cmd(args)
-    elif args.product_id:
-        get_product_info(args)
-    elif args.search:
-        search_datasets(args)
-    else:
-        parser.print_help()
+    # Configure logging
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format='%(levelname)s: %(message)s'
+    )
+    
+    discovery = DatasetDiscovery()
+    
+    try:
+        if args.dataset_id:
+            # Get specific dataset details
+            print(f"\n=== Dataset Details: {args.dataset_id} ===\n")
+            info = discovery.get_dataset_details(args.dataset_id)
+            
+            print(f"Dataset ID: {info['dataset_id']}")
+            print(f"Dataset Name: {info.get('dataset_name', 'N/A')}")
+            print(f"Product: {info.get('product_title', 'N/A')}")
+            print(f"\nCoverage:")
+            print(format_coverage(info.get('coverage', {})))
+            print(f"\nVariables:")
+            print(format_variables(info.get('variables', [])))
+            
+        elif args.search:
+            # Search for datasets
+            keywords = args.search.split()
+            print(f"\n=== Searching for: {' '.join(keywords)} ===")
+            if args.region:
+                print(f"Region filter: {args.region}\n")
+            
+            results = discovery.search(
+                keywords=keywords,
+                region_name=args.region
+            )
+            
+            print(f"\nFound {len(results)} datasets:\n")
+            
+            for i, ds in enumerate(results, 1):
+                print(f"{i}. {ds['dataset_id']}")
+                print(f"   Product: {ds.get('product_title', 'N/A')}")
+                
+                # Show coverage summary
+                coverage = ds.get('coverage', {})
+                if 'bbox' in coverage:
+                    bbox = coverage['bbox']
+                    print(f"   Region: {bbox['lon_min']:.1f}°E to {bbox['lon_max']:.1f}°E, "
+                          f"{bbox['lat_min']:.1f}°N to {bbox['lat_max']:.1f}°N")
+                
+                # Show variables
+                variables = ds.get('variables', [])
+                if variables:
+                    var_names = [v['short_name'] for v in variables[:5]]
+                    var_str = ', '.join(var_names)
+                    if len(variables) > 5:
+                        var_str += f" (+{len(variables) - 5} more)"
+                    print(f"   Variables: {var_str}")
+                
+                print()
+            
+            # Export if requested
+            if args.export:
+                discovery.export_results(results, args.export)
+                print(f"Results exported to: {args.export}")
+        
+        else:
+            parser.print_help()
+    
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        if args.verbose:
+            raise
+        return 1
+    
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    exit(main())

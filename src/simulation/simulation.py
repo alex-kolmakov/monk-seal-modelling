@@ -56,7 +56,7 @@ class Simulation:
             
         logger.info(f"Created {num_agents} agents around ({start_lat}, {start_lon})")
 
-    def run(self, max_workers: int = None):
+    def run(self, max_workers: int | None = None):
         """Run the simulation loop until end_time."""
         logger.info("Starting Simulation Loop...")
         

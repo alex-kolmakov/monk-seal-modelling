@@ -5,16 +5,81 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "cartopy>=0.22.0",
     "contextily>=1.7.0",
     "copernicusmarine>=2.2.5",
     "dash>=3.3.0",
     "dask>=2025.12.0",
     "duckdb>=1.4.3",
+    "ffmpeg-python>=0.2.0",
     "geopandas>=1.1.2",
     "matplotlib>=3.10.8",
     "netcdf4>=1.7.3",
+    "numpy>=2.4.0",
     "pandas>=2.2.2,<2.3",
     "scipy>=1.16.3",
     "shapely>=2.1.2",
     "xarray>=2025.12.0",
 ]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "responses>=0.24.0",
+]
+dev = [
+    "ruff>=0.1.0",
+    "mypy>=1.8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--cov=src",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]  # Allow assert in tests
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+
+
+[dependency-groups]
+dev = [
+    "pyrefly>=0.48.1",
+]
+
+[tool.pyrefly]
+source_directories = ["."]
+search_path = ["."]
+python-version = "3.12.0"

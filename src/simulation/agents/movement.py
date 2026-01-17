@@ -9,7 +9,7 @@ def correlated_random_walk(
     current_heading: float,
     speed: float = 0.05, # ~5km/step (Assuming 1 step = 1 hour)
     tortuosity: float = 0.8, # 1.0 = straight line, 0.0 = random
-    bias_pos: tuple = None,
+    bias_pos: tuple | None = None,
     bias_strength: float = 0.0
 ) -> tuple:
     """

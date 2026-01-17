@@ -4,7 +4,7 @@ import sys
 import os
 import json
 from src.data_ingestion.copernicus_manager import CopernicusManager
-from src.data_ingestion.ranker import DatasetRanker
+# from src.data_ingestion.ranker import DatasetRanker
 
 def main():
     parser = argparse.ArgumentParser(description="Monk Seal ABM Data Agent")
@@ -17,10 +17,10 @@ def main():
     args = parser.parse_args()
     
     manager = CopernicusManager()
-    ranker = DatasetRanker()
+    # ranker = DatasetRanker()
 
     if args.action == "list":
-        datasets = manager.list_datasets(args.term)
+        datasets = manager.search_datasets(keywords=[args.term])
         print(f"Found {len(datasets)} datasets.")
         for ds in datasets[:5]: # Show top 5
             print(f"- {ds.get('title', 'No Title')} ({ds.get('product_id', 'No ID')})")
@@ -29,19 +29,20 @@ def main():
         # First get all candidate datasets (broad search based on goal)
         ignore_term = "physics" if args.goal == "physics" else "biogeochemistry" # naive term usage
         # Actually, let's search for "IBI" (Iberia-Biscay-Ireland) as a good default for this region
-        datasets = manager.list_datasets("IBI") 
+        datasets = manager.search_datasets(keywords=["IBI"]) 
         if not datasets:
-            datasets = manager.list_datasets() # Fallback to everything
+            datasets = manager.search_datasets() # Fallback to everything
             
-        ranked = ranker.rank_datasets(datasets, args.goal)
+        # ranked = ranker.rank_datasets(datasets, args.goal)
         
-        print(f"Top 3 Recommended Datasets for {args.goal}:")
-        for i, ds in enumerate(ranked[:3]):
-            print(f"{i+1}. {ds.get('title')} (ID: {ds.get('product_id')})")
-            print(f"   Score: {ds.get('ranking_score')}")
-            reasons = ds.get('ranking_reasons', [])
-            if reasons:
-                print(f"   Reasoning: {'; '.join(reasons)}")
+        # print(f"Top 3 Recommended Datasets for {args.goal}:")
+        # for i, ds in enumerate(ranked[:3]):
+        #     print(f"{i+1}. {ds.get('title')} (ID: {ds.get('product_id')})")
+        #     print(f"   Score: {ds.get('ranking_score')}")
+        #     reasons = ds.get('ranking_reasons', [])
+        #     if reasons:
+        #         print(f"   Reasoning: {'; '.join(reasons)}")
+        pass
             
     elif args.action == "download":
         if not args.dataset_id:

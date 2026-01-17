@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, cast
 import math
 import random
 from src.simulation.agents.movement import correlated_random_walk
@@ -14,6 +14,7 @@ class SealState(Enum):
     HAULING_OUT = "HAULING_OUT" # Transition to Land
     TRANSITING = "TRANSITING"
     RECOVERY = "RECOVERY"
+    DEAD = "DEAD"
 
 
 @dataclass
@@ -112,13 +113,13 @@ class SealAgent:
              # Higher background mortality for adult males (approx 10% annual)
              # 0.1 / 8760 ~= 1e-5
              if random.random() < 1.0e-5:
-                 self.state = "DEAD"
+                 self.state = SealState.DEAD
                  return
 
         self.burn_energy()
         if self.energy <= self.max_energy * 0.10:
             self.log(f"DIED of Starvation (Critical Condition). Energy={self.energy:.1f}")
-            self.state = "DEAD"
+            self.state = SealState.DEAD
             return
         
         old_state = self.state
@@ -566,7 +567,10 @@ class SealAgent:
             
             for c in candidates:
                 # Check if this candidate position is a coastline cell
-                check_data = query_env_buffers(c['pos'][0], c['pos'][1], env_buffers)
+                c_pos = c['pos']
+                # assert isinstance(c_pos, tuple)
+                c_pos_tuple = cast(tuple[float, float], c_pos)
+                check_data = query_env_buffers(c_pos_tuple[0], c_pos_tuple[1], env_buffers)
                 is_coastline = check_data.get('is_coastline', False)
                 
                 if not is_coastline:
@@ -675,8 +679,10 @@ class SealAgent:
                  
         # Exec Move
         if best_c:
-            self.pos = best_c['pos']
-            self.heading = best_c['heading']
+            best_pos = best_c['pos']
+            # assert isinstance(best_pos, tuple)
+            self.pos = cast(tuple[float, float], best_pos)
+            self.heading = float(cast(float, best_c['heading']))
                     
     def forage(self, env_data, env_buffers):
         # 1. Determine Feed Mode based on Age

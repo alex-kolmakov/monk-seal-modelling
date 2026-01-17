@@ -77,6 +77,8 @@ def analyze_tidal_data():
     valid_adt = adt_timeseries[~np.isnan(adt_timeseries)]
     valid_sla = sla_timeseries[~np.isnan(sla_timeseries)]
     
+    daily_changes = np.array([])
+    
     if len(valid_adt) > 0:
         print(f"\nADT Time Series:")
         print(f"  Valid points: {len(valid_adt)}/{len(adt_timeseries)}")

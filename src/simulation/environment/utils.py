@@ -1,7 +1,7 @@
 import numpy as np
-from typing import Dict
+from typing import Dict, Any
 
-def query_env_buffers(lat: float, lon: float, buffers: Dict) -> Dict[str, float]:
+def query_env_buffers(lat: float, lon: float, buffers: Dict) -> Dict[str, Any]:
     """
     Stateless query of environment buffers.
     buffers format: {
@@ -74,7 +74,7 @@ def query_env_buffers(lat: float, lon: float, buffers: Dict) -> Dict[str, float]
                     if key == 'depth':
                          # Search spiral/radius for valid depth FOR NAVIGATION
                          # Land detection already done above using unclamped position
-                         found_depth = None
+                         found_depth: float | None = None
                          for radius in range(1, 4): # Check 3 layers (approx 3-9km)
                              if found_depth is not None: break
                              for dr in range(-radius, radius+1):
