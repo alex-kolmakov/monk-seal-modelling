@@ -27,6 +27,7 @@ def query_env_buffers(lat: float, lon: float, buffers: dict) -> dict[str, Any]:
         "is_land": False,
         "hsi": 0.0,
         "depth": None,
+        "tide": 0.5,
     }
 
     original_depth_is_nan = False  # Track if original bathymetry was NaN
@@ -103,6 +104,9 @@ def query_env_buffers(lat: float, lon: float, buffers: dict) -> dict[str, Any]:
                     result[key] = float(val)
         except Exception:
             pass
+
+    # Retrieve scalar tide if it exists
+    result["tide"] = buffers.get("tide", 0.5)
 
     # Land Logic: Use ORIGINAL bathymetry NaN to determine land
     # Key insight: If original depth was NaN, it's land (island shape from data)

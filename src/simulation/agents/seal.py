@@ -2,7 +2,7 @@ import math
 import random
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import cast
+from typing import Any, cast
 
 from src.simulation.agents.movement import correlated_random_walk
 from src.simulation.environment.utils import query_env_buffers
@@ -172,12 +172,33 @@ class SealAgent:
         if self.state == "DEAD":
             return
 
+        # Tide Data
+        tide = env_data.get("tide", 0.5)
+        high_tide_threshold = 0.70
+        low_tide_threshold = 0.30
+
+        # --- TIDE FORCING (Highest Priority) ---
+        # High Tide: Must be in water (Forage/Transit)
+        if tide > high_tide_threshold:
+            if is_land:
+                # DANGER: We are on land during high tide (Inundation risk)
+                # Must exit immediately
+                self.log(f"HIGH TIDE ({tide:.2f} > {high_tide_threshold}): Evacuating land!")
+                self.state = SealState.TRANSITING  # Will seek water
+                return
+            elif self.state in [SealState.HAULING_OUT, SealState.RESTING, SealState.SLEEPING]:
+                # In water but trying to rest/haulout - Force filter
+                # Cannot Haulout at High Tide (Caves flooded)
+                self.log(f"HIGH TIDE ({tide:.2f}): Forcing Foraging (Caves flooded)")
+                self.state = SealState.FORAGING
+                return
+
         # --- ADULT LOGIC ---
+
+        # 1. HAULING OUT PROCESS
         if self.state == SealState.HAULING_OUT:
-            # Tide Forcing: Hard to haul out at high tide?
-            tide = env_data.get("tide", 0.5)
-            if tide > 0.8 and not is_land:
-                # Abort haul out, go forage
+            # Abort if tide gets too high
+            if tide > high_tide_threshold and not is_land:
                 self.state = SealState.FORAGING
                 return
 
@@ -197,86 +218,81 @@ class SealAgent:
                     self.memory.haulout_sites.append(self.pos)
             return
 
+        # 2. SLEEPING (On Land)
         if self.state == SealState.SLEEPING:
             if not is_land:
-                # If we are sleeping in water (Bottling),
-                # only Haul Out if we are NOT desperate/tired
-                # If we are exhausted, just keep sleeping in water
-                if self.energy > self.max_energy * 0.20:
-                    self.state = SealState.HAULING_OUT
-                    return
+                # Bottling (Sleeping in water)
+                # If tide is low, we should try to Haul Out properly
+                if tide < low_tide_threshold:
+                     self.state = SealState.HAULING_OUT
+                     return
 
-            # Tide Forcing (User: "High tide... forces seals into water")
-            tide = env_data.get("tide", 0.5)
-            if tide > 0.8:
-                self.state = SealState.FORAGING
+                # If we are exhausted, stay bottling
+                if self.energy > self.max_energy * 0.20:
+                     # Wake up check
+                     if self.stomach_load == 0:
+                         self.state = SealState.FORAGING
                 return
 
-            # Wake up if it's day AND (We are rested OR We are hungry/empty)
-            if not is_night:
-                if self.energy > self.max_energy * 0.90 or self.stomach_load == 0:
-                    self.state = SealState.FORAGING
+            # On Land
+            if tide > high_tide_threshold:
+                 # Forced to wake up by tide
+                 self.state = SealState.FORAGING
+                 return
+
+            # Wake up if hungry
+            if self.stomach_load == 0 and self.energy < self.max_energy * 0.95:
+                 self.state = SealState.FORAGING
             return
 
+        # 3. RESTING (In Water)
         if self.state == SealState.RESTING:
-            if is_night:
-                if is_land:
-                    self.state = SealState.SLEEPING
-                else:
-                    # If critical, don't waste energy hauling out. Sleep in water (Bottle).
-                    if self.energy < self.max_energy * 0.15:
-                        self.state = SealState.SLEEPING
-                        self.log(
-                            "Critical Energy: Sleeping in water (Bottling) instead of Hauling Out."
-                        )
-                    else:
-                        self.state = SealState.HAULING_OUT
+            # If Tide is Low -> Opportunity to Haul Out
+            if tide < low_tide_threshold:
+                # Prefer Hauling Out over floating rest
+                self.state = SealState.HAULING_OUT
                 return
+
+            # Wake up if digested or hungry
             if self.stomach_load == 0 and self.energy > self.max_energy * 0.9:
                 self.state = SealState.FORAGING
             return
 
+        # 4. FORAGING
         if self.state == SealState.FORAGING:
-            # Desperation Override: If critical energy and empty stomach, MUST FORAGE.
-            # Do not haul out to sleep/die.
-            # Threshold: If we have ANY food (e.g. >0.1kg), we should digest it to survive.
-            # Only forage if empty.
+            # Desperation Override
             is_desperate = self.energy < self.max_energy * 0.15 and self.stomach_load < 0.1
-
             if is_desperate:
-                # Ignore Night/Tide, just eat.
-                return
+                return # Keep eating
 
-            if is_night:
-                if is_land:
-                    self.state = SealState.SLEEPING
+            # Tiredness / Satiety
+            is_tired = self.energy < self.max_energy * 0.2
+            is_full = self.stomach_load > self.stomach_capacity * 0.8
+
+            if is_full or is_tired:
+                # seek rest
+                # Check Tide for decision
+                if tide < low_tide_threshold:
+                    self.state = SealState.HAULING_OUT
                 else:
-                    # Night: Sleep. If critical, water sleep.
-                    if self.energy < self.max_energy * 0.15:
-                        self.state = SealState.SLEEPING
-                        self.log("Critical Energy (Night): Bottling.")
-                    else:
-                        self.state = SealState.HAULING_OUT
+                    self.state = SealState.RESTING # Rest in water until tide drops
                 return
 
-            # Day Logic - Tiredness
-            if self.energy < self.max_energy * 0.2:
-                # Only rest if we have food to digest.
-                # If empty, we must keep foraging regardless of fatigue.
-                if self.stomach_load > 0:
-                    if is_land:
-                        self.state = SealState.SLEEPING
-                    else:
-                        if self.energy < self.max_energy * 0.15:
-                            self.state = SealState.SLEEPING
-                            self.log("Critical Energy (Tired): Bottling.")
-                        else:
-                            self.state = SealState.HAULING_OUT
-                    return
-                # Else: Keep Foraging (Desperate for food)
-            if self.stomach_load > self.stomach_capacity * 0.8:
-                self.state = SealState.RESTING
+            # Low Tide Opportunity: Maybe haul out if semi-full?
+            # (Optional: Seals like to sleep at low tide even if not 100% full)
+            if tide < low_tide_threshold and self.stomach_load > self.stomach_capacity * 0.5:
+                 self.state = SealState.HAULING_OUT
+                 return
+
+        # 5. TRANSITING
+        if self.state == SealState.TRANSITING:
+            # If we were transiting to escape land (Tide Panic), check if we are safe
+            if not is_land:
+                self.log("TRANSITING -> FORAGING: Safe in water (Escaped land/Tide Panic ended)")
+                self.state = SealState.FORAGING
                 return
+            # Else: We are still on land, so we must keep TRANSITING (Panic Move)
+            return
 
     def _get_home_bias(self):
         # Return vector to home (first haulout site)
@@ -449,8 +465,21 @@ class SealAgent:
 
         return None, None
 
-    def _move_smart(self, env_buffers, seek_land=False, target_pos=None, speed=0.05):
-        """Move logic using stateless buffers query."""
+    def _move_smart(
+        self, env_buffers, intention="WATER", target_pos=None, speed=0.05
+    ):
+        """
+        Move logic using stateless buffers query.
+
+        Args:
+            env_buffers: Environment data buffers
+            intention: "WATER", "LAND", "SHELF"
+                - WATER: Avoid land (Transit/Forage in open water)
+                - LAND: Seek land (Haul out) - coast is valid target
+                - SHELF: Seek shallow water (<100m) but NOT land (Foraging)
+            target_pos: Optional (lat, lon) target to navigate towards
+            speed: Movement speed in degrees/step
+        """
         if env_buffers is None:
             self.pos, self.heading = correlated_random_walk(
                 None, self.pos, self.heading, speed=speed
@@ -459,7 +488,6 @@ class SealAgent:
 
         # Deep Water Panic - Find Nearest Shallow Water
         # If we're in dangerously deep water, search for nearest shallow water
-        # This prevents returning to coastline cells (which may be marked as land)
         curr_data_check = query_env_buffers(self.pos[0], self.pos[1], env_buffers)
         depth_check = curr_data_check.get("depth", 9999)
 
@@ -474,8 +502,12 @@ class SealAgent:
             search_steps = 8
             for i in range(search_steps):
                 for j in range(search_steps):
-                    test_lat = self.pos[0] + (i - search_steps / 2) * (search_radius / search_steps)
-                    test_lon = self.pos[1] + (j - search_steps / 2) * (search_radius / search_steps)
+                    test_lat = self.pos[0] + (i - search_steps / 2) * (
+                        search_radius / search_steps
+                    )
+                    test_lon = self.pos[1] + (j - search_steps / 2) * (
+                        search_radius / search_steps
+                    )
 
                     test_data = query_env_buffers(test_lat, test_lon, env_buffers)
                     test_depth = test_data.get("depth", 9999)
@@ -496,6 +528,7 @@ class SealAgent:
                     f"DEEP WATER PANIC! Depth={depth_check}m, "
                     f"heading to shallow water at {target_pos}"
                 )
+                intention = "SHELF"  # Force intention to find shelf
             elif target_pos is None:
                 # Fallback to home if no shallow water found
                 bias_pos, _ = self._get_home_bias()
@@ -506,244 +539,189 @@ class SealAgent:
                         f"heading home to {target_pos}"
                     )
 
-        # Moderate depth - gentle bias toward home if not already targeting something
-        elif depth_check > 500 and target_pos is None and not seek_land:
-            bias_pos, _ = self._get_home_bias()
-            if bias_pos:
-                # Gentle pull home
-                d_lat = bias_pos[0] - self.pos[0]
-                d_lon = bias_pos[1] - self.pos[1]
-                target_heading = math.atan2(d_lat, d_lon)
-
-                # Mix headings (80% home, 20% current) - stronger than before
-                diff = target_heading - self.heading
-                diff = (diff + math.pi) % (2 * math.pi) - math.pi
-                self.heading += diff * 0.4  # Increased from 0.2
-
+        # Apply target heading if we have one
         if target_pos:
             d_lat = target_pos[0] - self.pos[0]
             d_lon = target_pos[1] - self.pos[1]
-            # atan2(y, x) -> atan2(d_lat, d_lon) for standard unit circle (0=East)
-            # Check movement.py: computes sin(heading) for lat, cos(heading) for lon.
-            # So wrapping: heading=0 -> sin(0)=0 (No N/S), cos(0)=1 (East). Correct.
             target_heading = math.atan2(d_lat, d_lon)
             self.heading = target_heading
 
         # Sample candidates
-        candidates = []
-        step_speed = speed
-
-        for _ in range(10):
-            new_pos, new_heading = correlated_random_walk(
-                None, self.pos, self.heading, speed=step_speed
-            )
-            check_data = query_env_buffers(new_pos[0], new_pos[1], env_buffers)
-            candidates.append({"pos": new_pos, "heading": new_heading, "data": check_data})
-
-        # COLLISION CHECK: Prevent land crossing, but with special handling for land positions
-        # - If in WATER: Never allow paths that cross land (prevents island teleportation)
-        # - If on LAND and seeking WATER: Allow land crossing (escape from coastline)
-        # - If on LAND and seeking LAND: Apply normal collision check
-
+        # COLLISION CHECK (Pre-computation)
         curr_data = query_env_buffers(self.pos[0], self.pos[1], env_buffers)
         currently_on_land = curr_data.get("is_land", False)
-        curr_depth = curr_data.get("depth", 9999)
 
-        # Determine if we should apply collision check
-        should_check_collision = True
-        if currently_on_land and not seek_land:
-            # On land, seeking water - allow land crossing to escape
-            should_check_collision = False
-            self.log("On land seeking water - allowing land crossing for escape")
+        candidates: list[dict[str, Any]] = []
+        step_speed = speed
 
-        if should_check_collision:
-            # Apply collision check to all candidates
-            safe_candidates = []
-            blocked_count = 0
-            for c in candidates:
-                path_crosses_land = self._path_intersects_land(self.pos, c["pos"], env_buffers)
-
-                # Reject any path that crosses land
-                if not path_crosses_land:
-                    safe_candidates.append(c)
-                else:
-                    blocked_count += 1
-
-            # Log collision filtering
-            if blocked_count > 0:
-                land_status = f"on_land={currently_on_land}, depth={curr_depth:.1f}m"
-                self.log(
-                    f"COLLISION CHECK ({land_status}): "
-                    f"Blocked {blocked_count}/{len(candidates)} paths crossing land"
+        # Candidate Generation Strategy
+        if currently_on_land:
+            # PANIC/ESCAPE: We are on land. Ignore momentum (CRW).
+            # Sample 360 degrees uniformly to find water.
+            for _ in range(20):  # More samples to ensure we find a valid move
+                new_heading = random.uniform(0, 2 * math.pi)
+                # Manual projection (simple approximation suffices for short steps)
+                new_lat = self.pos[0] + step_speed * math.cos(new_heading)
+                # Adjust lon for latitude (approx)
+                new_lon = self.pos[1] + step_speed * math.sin(new_heading) / math.cos(
+                    math.radians(self.pos[0])
                 )
 
-            # If all paths cross land, keep original candidates as fallback
-            # This prevents the seal from getting completely stuck
-            if safe_candidates:
-                candidates = safe_candidates
-            else:
-                self.log(
-                    f"WARNING: All paths blocked. Pos: {self.pos}, "
-                    f"SeekLand: {seek_land}, OnLand: {currently_on_land}"
+                check_data = query_env_buffers(new_lat, new_lon, env_buffers)
+                candidates.append(
+                    {"pos": (new_lat, new_lon), "heading": new_heading, "data": check_data}
+                )
+        else:
+             # Normal Movement: Correlated Random Walk (Momentum)
+             for _ in range(10):
+                new_pos, new_heading = correlated_random_walk(
+                    None, self.pos, self.heading, speed=step_speed
+                )
+                check_data = query_env_buffers(new_pos[0], new_pos[1], env_buffers)
+                candidates.append(
+                    {"pos": new_pos, "heading": new_heading, "data": check_data}
                 )
 
-        # COASTLINE AVOIDANCE: Filter out coastline cells when seeking water FOR FORAGING
-        # Coastline cells are problematic - they have is_land=True but inferred depths
-        # Seals can get trapped there because they can't eat but appear navigable
-        # IMPORTANT: Only avoid coastline when NOT seeking land (i.e., when foraging in water)
-        # When seeking land (haul-out), coastline cells are acceptable destinations
-        if not seek_land and not currently_on_land and len(candidates) > 0:
-            non_coastline_candidates = []
-            coastline_count = 0
+        # Filter candidates based on intention
+        valid_candidates = []
 
-            for c in candidates:
-                # Check if this candidate position is a coastline cell
-                c_pos = c["pos"]
-                # assert isinstance(c_pos, tuple)
-                c_pos_tuple = cast(tuple[float, float], c_pos)
-                check_data = query_env_buffers(c_pos_tuple[0], c_pos_tuple[1], env_buffers)
-                is_coastline = check_data.get("is_coastline", False)
+        for c in candidates:
+            c_is_land = c["data"].get("is_land", False)
+            c_is_coastline = c["data"].get("is_coastline", False)
 
-                if not is_coastline:
-                    non_coastline_candidates.append(c)
-                else:
-                    coastline_count += 1
+            # Check path intersection with land
+            # Only check if we are NOT on land (if on land, we can move anywhere to escape)
+            path_crosses_land = False
+            if not currently_on_land:
+                 path_crosses_land = self._path_intersects_land(self.pos, c["pos"], env_buffers)
 
-            # If we have non-coastline options, use them
-            if non_coastline_candidates:
-                candidates = non_coastline_candidates
-                if coastline_count > 0:
-                    self.log(
-                        f"COASTLINE AVOIDANCE: "
-                        f"Filtered out {coastline_count} coastline cells (foraging in water)"
-                    )
-            else:
-                # All candidates are coastline - keep them as fallback but log warning
-                self.log(f"WARNING: All {len(candidates)} candidates are coastline cells")
+            if intention == "WATER":
+                # Must not be land
+                # Must not cross land
+                if not c_is_land and not path_crosses_land:
+                    # Avoid coastline for "WATER" intention (pure transit/forage)
+                    if not c_is_coastline:
+                        valid_candidates.append(c)
 
-        # Decision Logic
+            elif intention == "SHELF":
+                # Must not be land
+                # Must not cross land
+                # Prefer depth < 100 (Gradient descent checks this later)
+                if not c_is_land and not path_crosses_land:
+                     # Coastline is risky for SHELF intention too, but maybe acceptable?
+                     # Let's avoid it to be safe, unless we are desperate.
+                     # Let's avoid it to be safe, unless we are desperate.
+                     if not c_is_coastline:
+                         valid_candidates.append(c)
+
+            elif intention == "LAND":
+                # Can be land
+                # Can cross land (entering from water)
+                # If target is land, we WANT to hit land
+                valid_candidates.append(c)
+
+        # Fallback: If no candidates filtered, relax constraints
+        if not valid_candidates:
+             # Try allowing coastline
+            if intention in ["WATER", "SHELF"]:
+                 for c in candidates:
+                    c_is_land = c["data"].get("is_land", False)
+                    if not currently_on_land:
+                        path_crosses_land = self._path_intersects_land(
+                            self.pos, c["pos"], env_buffers
+                        )
+                    else:
+                        path_crosses_land = False
+
+                    if not c_is_land and not path_crosses_land:
+                        valid_candidates.append(c)
+
+            # Still nothing? Just use all candidates (Panic/Stuck)
+            if not valid_candidates:
+                valid_candidates = candidates
+                self.log(
+                    f"WARNING: No valid move candidates for intention {intention}. "
+                    "Using UNSAFE fallback."
+                )
+
+        candidates = valid_candidates
         best_c = None
 
-        if seek_land:
-            # Ensure we have a target for Beacon logic (Home Bias)
-            if target_pos is None and self.memory.haulout_sites:
-                target_pos, _ = self._get_home_bias()
-
+        # Selection Logic
+        if intention == "LAND":
             # 1. Try to find actual Land
             land_matches = [c for c in candidates if c["data"].get("is_land", False)]
             if land_matches:
                 best_c = random.choice(land_matches)
             else:
-                # 2. Gradient Descent: Find shallowest water (Approach Shelf)
-                # Filter out those with invalid depth (9999) if possible
-                valid_depths = [
-                    c
-                    for c in candidates
-                    if c["data"].get("depth") is not None and c["data"]["depth"] != 9999
-                ]
-                if valid_depths:
-                    if target_pos:
-                        # BEACON FIX: If we have a target (Home),
-                        # use it to break ties or guide on flat abyssal plains.
-                        # Sort by depth first.
-                        valid_depths.sort(key=lambda c: c["data"].get("depth", 9999))
-                        # Take top 3 shallowest (or fewer)
-                        top_k = valid_depths[:5]
-                        # Pick the one that gets us closest to target
-                        best_c = min(
-                            top_k,
-                            key=lambda c: (c["pos"][0] - target_pos[0]) ** 2
-                            + (c["pos"][1] - target_pos[1]) ** 2,
-                        )
-                    else:
-                        best_c = min(valid_depths, key=lambda c: c["data"].get("depth", 9999))
-                else:
-                    # All are void/unknown -> fallback to random choice from all
-                    if target_pos:
-                        best_c = min(
-                            candidates,
-                            key=lambda c: (c["pos"][0] - target_pos[0]) ** 2
-                            + (c["pos"][1] - target_pos[1]) ** 2,
-                        )
-                    else:
-                        best_c = random.choice(candidates)
-        else:
-            # Seek Water (Foraging / Transit)
-            # Filter to water destinations only (collision already checked above)
-            water_matches = [c for c in candidates if not c["data"].get("is_land", False)]
-
-            if water_matches:
-                if target_pos:
-                    # FIX: Homing / Panic. Move towards target (Home).
-                    best_c = min(
-                        water_matches,
+                 # Move towards target if exists
+                 if target_pos:
+                     best_c = min(
+                        candidates,
                         key=lambda c: (c["pos"][0] - target_pos[0]) ** 2
                         + (c["pos"][1] - target_pos[1]) ** 2,
                     )
-                else:
-                    # FIX: Bias towards Shallow Water (Shelf) to avoid Open Ocean death.
-                    # Sort by depth map. (None = 9999).
-                    def get_depth(c):
-                        d = c["data"].get("depth")
-                        return d if d is not None else 9999
+                 else:
+                     best_c = random.choice(candidates)
 
-                    # Pick one of the top 3 shallowest to allow some randomness but stay safe
-                    water_matches.sort(key=get_depth)
-                    # Take top 3 or all if less
-                    top_k = water_matches[:3]
-                    best_c = random.choice(top_k)
-            else:
-                # All Land (Trapped?) -> Pick random (hoping to escape)
-                # FIX: Use memory to find coast (Haulout sites are coastal)
-                if self.memory.haulout_sites:
-                    # Find closest haulout
-                    closest_h = min(
-                        self.memory.haulout_sites,
-                        key=lambda p: (p[0] - self.pos[0]) ** 2 + (p[1] - self.pos[1]) ** 2,
+        elif intention == "SHELF":
+             # Prioritize Shallow Water (<100m)
+             # Sort candidates by depth
+             def get_depth_score(c):
+                 d = c["data"].get("depth")
+                 if d is None:
+                     return 9999
+                 if d < 0:
+                     return 9999  # Bad data
+                 # Ideal: 0-50m. Penalty for >100m.
+                 return d
+
+             candidates.sort(key=get_depth_score)
+
+             # If top candidate is shallow (<100m), pick it
+             top_depth = get_depth_score(candidates[0])
+             if top_depth < 100:
+                 best_c = candidates[0] # Steepest descent to shallow
+             else:
+                 # No shallow options? Move towards target or random
+                  if target_pos:
+                     best_c = min(
+                        candidates,
+                        key=lambda c: (c["pos"][0] - target_pos[0]) ** 2
+                        + (c["pos"][1] - target_pos[1]) ** 2,
                     )
-                    dist_sq = (closest_h[0] - self.pos[0]) ** 2 + (closest_h[1] - self.pos[1]) ** 2
+                  else:
+                      best_c = candidates[0] # Move to shallowest available
 
-                    if dist_sq < 0.0025:  # Very close (~0.05^2)
-                        # We are at the haulout but still trapped.
-                        # Try larger steps to "jump" into water
-                        jump_candidates = []
-                        for _ in range(10):
-                            jp, jh = correlated_random_walk(
-                                None, self.pos, self.heading, speed=0.15
-                            )  # 3x speed
-                            jd = query_env_buffers(jp[0], jp[1], env_buffers)
-                            jump_candidates.append({"pos": jp, "heading": jh, "data": jd})
+        elif intention == "WATER":
+             # Just move, maybe bias to target
+             if target_pos:
+                     best_c = min(
+                        candidates,
+                        key=lambda c: (c["pos"][0] - target_pos[0]) ** 2
+                        + (c["pos"][1] - target_pos[1]) ** 2,
+                    )
+             else:
+                 # WANDER: Prefer shallow water (<100m) to stay on shelf
+                 shallow_candidates = [
+                     c
+                     for c in candidates
+                     if c["data"].get("depth", 9999) is not None
+                     and c["data"].get("depth", 9999) <= 100
+                 ]
+                 if shallow_candidates:
+                     best_c = random.choice(shallow_candidates)
+                 else:
+                     best_c = random.choice(candidates)
 
-                        water_jumps = [
-                            c for c in jump_candidates if not c["data"].get("is_land", False)
-                        ]
-                        if water_jumps:
-                            best_c = random.choice(water_jumps)
-                            self.log("Trapped on Haulout! JUMPING into Water.")
-                        else:
-                            # Still stuck? Just move random
-                            best_c = random.choice(candidates)
-                    else:
-                        # Standard guide to haulout
-                        best_c = min(
-                            candidates,
-                            key=lambda c: (c["pos"][0] - closest_h[0]) ** 2
-                            + (c["pos"][1] - closest_h[1]) ** 2,
-                        )
+        # Determine specific best_c if not set above (Fallback)
+        if not best_c:
+            best_c = random.choice(candidates)
 
-                    if not best_c:  # Fallback if logic above failed to set it (unlikely)
-                        best_c = random.choice(candidates)
-
-                    self.log("Trapped on Land! Using memory to guide back to coast.")
-                else:
-                    best_c = random.choice(candidates)
-
-        # Exec Move
-        if best_c:
-            best_pos = best_c["pos"]
-            # assert isinstance(best_pos, tuple)
-            self.pos = cast(tuple[float, float], best_pos)
-            self.heading = float(cast(float, best_c["heading"]))
+        # Execute Move
+        best_pos = best_c["pos"]
+        self.pos = cast(tuple[float, float], best_pos)
+        self.heading = float(cast(float, best_c["heading"]))
 
     def forage(self, env_data, env_buffers):
         # 1. Determine Feed Mode based on Age
@@ -798,7 +776,7 @@ class SealAgent:
                     )
                     land_pos, _ = self._find_nearest_land(env_buffers, max_radius_km=20.0)
                     if land_pos:
-                        self._move_smart(env_buffers, seek_land=True, target_pos=land_pos)
+                        self._move_smart(env_buffers, intention="LAND", target_pos=land_pos)
                     else:
                         # No land found - move toward remembered haulout site
                         if self.memory.haulout_sites:
@@ -806,17 +784,13 @@ class SealAgent:
                                 self.memory.haulout_sites,
                                 key=lambda p: (p[0] - self.pos[0]) ** 2 + (p[1] - self.pos[1]) ** 2,
                             )
-                            self._move_smart(env_buffers, seek_land=True, target_pos=target)
+                            self._move_smart(env_buffers, intention="LAND", target_pos=target)
                         else:
-                            self._move_smart(env_buffers, seek_land=True, target_pos=None)
+                            self._move_smart(env_buffers, intention="LAND", target_pos=None)
                 else:
                     # Normal foraging movement
-                    # If Deep (>120m), swim towards Land (Shelf)
-                    target = None
-                    # if depth > 120: target = ... # Old static target was deep (318m)
-
-                    # Seek Land if deep to find shelf (Madeira shelf is narrow, 100m is edge)
-                    # But if we are ON LAND, we must seek water!
+                    # If Deep (>120m), swim towards Shelf (Shallow Water)
+                    # If we are ON LAND, we must seek water!
                     is_land = env_data.get("is_land", False)
                     if is_land:
                         # SMART WATER ESCAPE: Find nearest water
@@ -826,15 +800,19 @@ class SealAgent:
                         )
                         if water_pos:
                             self.log(f"WATER ESCAPE: Navigating to water at {water_dist:.2f}km")
-                            self._move_smart(env_buffers, seek_land=False, target_pos=water_pos)
+                            self._move_smart(env_buffers, intention="WATER", target_pos=water_pos)
                         else:
                             # No water found - try random movement
                             self.log("WARNING: No water found nearby, trying random escape")
-                            self._move_smart(env_buffers, seek_land=False, target_pos=None)
+                            self._move_smart(env_buffers, intention="WATER", target_pos=None)
                     else:
-                        do_seek_land = depth > 100
-                        self.log(f"Forage Move. Depth={depth:.1f}m. SeekLand={do_seek_land}")
-                        self._move_smart(env_buffers, seek_land=do_seek_land, target_pos=None)
+                        # If deep, intention is SHELF. Else WATER (random foraging)
+                        depth = env_data.get("depth", 9999)
+                        if depth > 100:
+                            self.log(f"Forage Move. Depth={depth:.1f}m. Seeking Shelf.")
+                            self._move_smart(env_buffers, intention="SHELF", target_pos=None)
+                        else:
+                             self._move_smart(env_buffers, intention="WATER", target_pos=None)
                 pass
             else:
                 self.patch_residence_time += 1
@@ -860,15 +838,18 @@ class SealAgent:
                 water_pos, water_dist = self._find_nearest_water(env_buffers, max_radius_km=5.0)
                 if water_pos:
                     self.log(f"WATER ESCAPE: Navigating to water at {water_dist:.2f}km")
-                    self._move_smart(env_buffers, seek_land=False, target_pos=water_pos)
+                    self._move_smart(env_buffers, intention="WATER", target_pos=water_pos)
                 else:
                     # No water found nearby - try random movement
                     self.log("WARNING: No water found nearby, trying random escape")
-                    self._move_smart(env_buffers, seek_land=False, target_pos=None)
+                    self._move_smart(env_buffers, intention="WATER", target_pos=None)
             else:
                 # Normal transit feeding in water
-                do_seek_land = d_check is None or d_check > 100
-                self._move_smart(env_buffers, seek_land=do_seek_land, target_pos=None)
+                d_check = env_data.get("depth", 9999)
+                if d_check > 100:
+                    self._move_smart(env_buffers, intention="SHELF", target_pos=None)
+                else:
+                    self._move_smart(env_buffers, intention="WATER", target_pos=None)
 
             check = query_env_buffers(self.pos[0], self.pos[1], env_buffers)
             depth = check.get("depth")
@@ -914,7 +895,23 @@ class SealAgent:
                 )
 
     def transit(self, env_buffers):
-        self._move_smart(env_buffers, seek_land=False)
+        # Check if we are stuck on land (e.g. High Tide Evacuation)
+        curr_data = query_env_buffers(self.pos[0], self.pos[1], env_buffers)
+        if curr_data.get("is_land", False):
+            self.log("TRANSITING on land - searching for nearest water to escape")
+            water_pos, water_dist = self._find_nearest_water(
+                env_buffers, max_radius_km=5.0
+            )
+            if water_pos:
+                self.log(f"WATER ESCAPE: Navigating to water at {water_dist:.2f}km")
+                self._move_smart(env_buffers, intention="WATER", target_pos=water_pos)
+            else:
+                # No water found - try random
+                self.log("WARNING: No water found nearby in TRANSIT, trying random escape")
+                self._move_smart(env_buffers, intention="WATER", target_pos=None)
+        else:
+            # We are in water, just transit normally
+            self._move_smart(env_buffers, intention="WATER", target_pos=None)
 
     def haul_out_search(self, env_buffers):
         """Search for and navigate to land for hauling out."""
@@ -940,10 +937,10 @@ class SealAgent:
                     self.log("No land found nearby, using remembered haulout site")
 
         if target:
-            self._move_smart(env_buffers, seek_land=True, target_pos=target)
+            self._move_smart(env_buffers, intention="LAND", target_pos=target)
         else:
             # No target at all - just move toward land generally
-            self._move_smart(env_buffers, seek_land=True, target_pos=None)
+            self._move_smart(env_buffers, intention="LAND", target_pos=None)
 
         # Timeout: If hunting for land too long (>5h), give up and bottle (Sleep in water)
         if self.state_duration > 5:
@@ -951,6 +948,13 @@ class SealAgent:
             self.state = SealState.SLEEPING
 
     def rest(self, env_data, env_buffers):
+        # Check tide - if low, maybe switch to hauling out?
+        tide = env_data.get("tide", 0.5)
+        if tide < 0.30: # LOW_TIDE_THRESHOLD
+             # We are resting in water, but tide is good for hauling out
+             # Let decide_activity switch us next tick - just finish this rest step
+             pass
+
         digestion_rate = 3500.0  # Adjusted for cephalopods
         if self.stomach_load > 0:
             self.energy += digestion_rate
@@ -960,16 +964,21 @@ class SealAgent:
         self.energy = min(self.energy, self.max_energy)
 
     def sleep(self, env_data, env_buffers):
-        # Removed strict 'if not is_land: return' to allow Water Sleeping (Bottling)
+        tide = env_data.get("tide", 0.5)
+        is_land = env_data.get("is_land", False)
+
+        # TIDE SAFETY CHECK:
+        # If sleeping on land and tide rises, we must wake up and move!
+        if is_land and tide > 0.75: # HIGH_TIDE_THRESHOLD + buffer
+             self.log(f"Waking up from sleep on land due to rising tide ({tide:.2f})!")
+             self.state = SealState.FORAGING # Or TRANSIT
+             return
 
         digestion_rate = 3500.0
         if self.stomach_load > 0:
             self.energy += digestion_rate
             self.stomach_load -= digestion_rate / 3500.0
             self.stomach_load = max(0, self.stomach_load)
-
-        # If sleeping in water, energy recovery is less efficient (thermal loss)?
-        # For now keep it same (RMR is burn, so net is negative usually unless digesting)
 
         self.energy = min(self.energy, self.max_energy)
 

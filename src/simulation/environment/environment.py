@@ -176,6 +176,16 @@ class Environment:
                 "shape": self.bathymetry_map.shape,
             }
 
+        # Add Tide (Simple Sine Wave, Period 12.4h)
+        # Store as scalar in buffers
+        try:
+            t_val = pd.Timestamp(self.current_time).value / (1e9 * 3600)  # hours
+            period = 12.4
+            # 0 = Low, 1 = High
+            self.buffers["tide"] = 0.5 * (1 + np.sin(2 * np.pi * t_val / period))
+        except Exception:
+            self.buffers["tide"] = 0.5
+
     def get_data_at_pos(
         self, lat: float, lon: float, time: pd.Timestamp | str | None = None
     ) -> dict[str, float]:
@@ -187,18 +197,15 @@ class Environment:
         # Delegate to stateless util
         data = query_env_buffers(lat, lon, self.buffers)
 
-        # Add Tide (Simple Sine Wave, Period 12.4h)
         if time:
-            try:
-                # Timestamp to hours (approx since epoch or just using .value)
-                # We need a continuous scaler.
-                t_val = pd.Timestamp(time).value / (1e9 * 3600)  # hours
-                period = 12.4
-                # 0 = Low, 1 = High
-                data["tide"] = 0.5 * (1 + np.sin(2 * np.pi * t_val / period))
-            except Exception:
-                data["tide"] = 0.5
-        else:
-            data["tide"] = 0.5
+             # If time provided, we might be out of sync with buffers["tide"]?
+             # But get_data_at_pos forces update_buffers(time) if different.
+             # So buffers["tide"] is correct.
+             pass
+
+        # Retrieve tide from buffers/utils
+        # (utils.query_env_buffers will retrieve it)
+        # data["tide"] is already in data from query_env_buffers (see next step)
+        pass
 
         return data
