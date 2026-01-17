@@ -46,6 +46,23 @@
 
 ---
 
+## 🎬 Examples
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <strong>🦭 Seal Behavior Animation</strong><br><br>
+      <video src="https://github.com/user-attachments/assets/1b9c0662-f8e9-42ad-9829-58c74959f3b2" controls width="100%"></video>
+    </td>
+    <td width="50%" align="center">
+      <strong>🌊 Weather & Environment</strong><br><br>
+      <video src="https://github.com/user-attachments/assets/079d6047-7075-4f08-b64f-e0cca51b33b5" controls width="100%"></video>
+    </td>
+  </tr>
+</table>
+
+---
+
 ## 🚀 Quick Start
 
 ### Prerequisites
