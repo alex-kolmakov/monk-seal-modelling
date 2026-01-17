@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/Mediterranean_monk_seal.jpg/1280px-Mediterranean_monk_seal.jpg" alt="Mediterranean Monk Seal" width="600">
+  <img src="https://upload.wikimedia.org/wikipedia/commons/5/51/Monachus_monachus_DSC_0274.jpg" alt="Mediterranean Monk Seal" width="600">
 </p>
 
 <h1 align="center">🦭 Madeira Monk Seal ABM</h1>
@@ -41,7 +41,6 @@
 - 🌊 **Data-Driven Environment**: Real oceanographic data from [Copernicus Marine Service](https://marine.copernicus.eu/) (currents, temperature, waves, chlorophyll)
 - 🧬 **Physiological Agents**: Energy balance, stomach load, digestion, and starvation dynamics
 - 🌙 **Tide-Driven Behavior**: Realistic activity patterns based on Madeira population research
-- 📊 **Interactive Dashboard**: Web-based visualization of population tracks and telemetry
 - 🎬 **Animation Export**: Generate MP4 videos of seal movements and environmental conditions
 - ⚡ **Fast Simulation**: Multiprocessing support for large population runs
 
@@ -101,14 +100,17 @@ uv run python -m src.simulation.run_real_long \
 ### Visualize Results
 
 ```bash
-# Launch interactive dashboard
-uv run python -m src.visualization.app data/real_long/simulation_results.csv
-# Open: http://127.0.0.1:8050
-
-# Generate animation
+# Generate seal behavior animation
 uv run python -m src.visualization.seal_animator \
   --seal-csv data/real_long/simulation_results.csv \
   --physics-file data/real_long/cmems_mod_ibi_phy_my_*.nc
+
+# Generate weather/environment animation
+uv run python -m src.visualization.weather_visualizer \
+  --physics data/real_long/cmems_mod_ibi_phy_my_*.nc \
+  --waves data/real_long/cmems_mod_ibi_wav_my_*.nc \
+  --bgc data/real_long/cmems_mod_ibi_bgc_my_*.nc \
+  --tidal data/real_long/tidal_2023_2024.nc
 ```
 
 ---
@@ -134,8 +136,7 @@ monk-seal-modelling/
 │   │
 │   ├── 📂 visualization/        # Plotting & animation
 │   │   ├── seal_animator.py     # Seal behavior animations
-│   │   ├── weather_visualizer.py # Environmental animations
-│   │   └── app.py               # Dash interactive dashboard
+│   │   └── weather_visualizer.py # Environmental animations
 │   │
 │   └── 📂 analysis/             # Statistical analysis
 │       ├── analyze_long_run.py  # Population dynamics plots
@@ -162,7 +163,7 @@ monk-seal-modelling/
 |----------|-------------|
 | [Seal Agent Architecture](docs/seal_agent_documentation.md) | Biological parameters, state machine, and scientific validation |
 | [Data Retrieval Guide](docs/copernicus_data_discovery.md) | Copernicus datasets, download process, tidal integration |
-| [Visualization Guide](docs/visualization_guide.md) | Animation tools, dashboard usage, troubleshooting |
+| [Visualization Guide](docs/visualization_guide.md) | Animation tools and troubleshooting |
 
 ---
 

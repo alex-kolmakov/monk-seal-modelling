@@ -122,32 +122,12 @@ uv run python -m src.analysis.analyze_long_run \
 
 ---
 
-## Interactive Dashboard
-
-For real-time exploration, use the Dash-based interactive dashboard:
-
-```bash
-# Launch interactive web dashboard
-uv run python -m src.visualization.app data/real_long/simulation_results.csv
-```
-
-**Features**:
-- Interactive map with Plotly
-- Time slider for playback
-- Agent selection and filtering
-- Metric charts
-
-**Access**: Open browser at `http://127.0.0.1:8050`
-
----
-
 ## Dependencies
 
 Visualization requires:
 - `matplotlib` >= 3.10 (animations, plots)
 - `cartopy` >= 0.22 (map projections)
 - `xarray` >= 2025.12 (NetCDF handling)
-- `dash` >= 3.3 (interactive dashboard)
 - `ffmpeg` (video encoding - must be installed on system)
 
 ### Installing FFmpeg
