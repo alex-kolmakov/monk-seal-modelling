@@ -1,7 +1,9 @@
-from typing import Dict, Any
+from typing import Any
+
 from src.simulation.agents.seal import SealAgent
 
-def update_agent_worker(agent: SealAgent, env_buffers: Dict[str, Any]) -> SealAgent:
+
+def update_agent_worker(agent: SealAgent, env_buffers: dict[str, Any]) -> SealAgent:
     """
     Top-level worker function for ProcessPoolExecutor.
     Receives an agent and environment buffers (pickled),
@@ -13,6 +15,7 @@ def update_agent_worker(agent: SealAgent, env_buffers: Dict[str, Any]) -> SealAg
         return agent
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         print(f"Error in agent worker {agent.id}: {e}")
         return agent

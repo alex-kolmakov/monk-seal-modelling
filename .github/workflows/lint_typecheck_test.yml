@@ -1,8 +1,8 @@
-name: Tests
+name: Lint, Type Check, and Test
 
 on:
   push:
-    branches: [ main, data-management-redesign ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12"]
     
     steps:
       - name: Checkout code
@@ -35,10 +35,9 @@ jobs:
         run: |
           uv run ruff check src/ tests/
       
-      - name: Type check with mypy
+      - name: Type check with pyrefly
         run: |
-          uv run mypy src/data_ingestion/
-        continue-on-error: true  # Don't fail on type errors initially
+          uv run pyrefly check
       
       - name: Run tests
         run: |
