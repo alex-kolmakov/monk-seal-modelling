@@ -16,6 +16,7 @@ data/
 
 # Coverage
 .coverage
+coverage.xml
 
 # OS
 .DS_Store

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, cast
 
+from src.simulation.agents.config import MADEIRA_CONFIG, SealConfig
 from src.simulation.agents.movement import correlated_random_walk
 from src.simulation.environment.utils import query_env_buffers
 
@@ -26,25 +27,32 @@ class SealMemory:
 
 
 class SealAgent:
-    def __init__(self, agent_id: str, start_pos: tuple[float, float], age: int = 5, sex: str = "F"):
+    def __init__(
+        self,
+        agent_id: str,
+        start_pos: tuple[float, float],
+        age: int = 5,
+        sex: str = "F",
+        config: SealConfig | None = None,
+    ):
         self.id = agent_id
         self.pos = start_pos
         self.heading = random.uniform(0, 2 * math.pi)
         self.age = age
         self.sex = sex
-        self.sex = sex
 
-        # Physiological Parameters
-        self.mass = 300.0
+        # Use provided config or default to Madeira
+        self.config = config or MADEIRA_CONFIG
+
+        # Physiological Parameters (from config)
+        self.mass = self.config.mass
         self.stomach_load = 0.0
-        self.stomach_capacity = 15.0
+        self.stomach_capacity = self.config.stomach_capacity
 
-        # Energy
-        # Energy
-        self.energy = 90000.0  # Start with good body condition (90%)
-        self.max_energy = 100000.0
-
-        self.rmr = 753.0
+        # Energy (from config)
+        self.energy = self.config.initial_energy
+        self.max_energy = self.config.max_energy
+        self.rmr = self.config.rmr
 
         # Parental State
         self.foraging_timer = 0
@@ -172,10 +180,10 @@ class SealAgent:
         if self.state == "DEAD":
             return
 
-        # Tide Data
+        # Tide Data (thresholds from config)
         tide = env_data.get("tide", 0.5)
-        high_tide_threshold = 0.70
-        low_tide_threshold = 0.30
+        high_tide_threshold = self.config.high_tide_threshold
+        low_tide_threshold = self.config.low_tide_threshold
 
         # --- TIDE FORCING (Highest Priority) ---
         # High Tide: Must be in water (Forage/Transit)
@@ -865,21 +873,34 @@ class SealAgent:
             self.log(f"Cannot forage on land (Depth={depth:.1f}m inferred, but is_land=True)")
             return
 
-        if depth <= 50:  # High Quality (0-50m)
-            rate = 3.0
+        # Base intake rate by depth (WHERE seals forage - benthic preference)
+        # Rates from config
+        if depth <= 50:  # High Quality (0-50m) - 95% of dives occur here
+            base_rate = self.config.shallow_foraging_rate
         elif depth <= 100:  # Medium Quality (50-100m)
-            rate = 1.0
+            base_rate = self.config.medium_foraging_rate
         else:
-            rate = 0.0  # Desert (>100m)
+            base_rate = self.config.deep_foraging_rate  # Desert (>100m) - cannot reach benthos
 
-        # Random variability (success rate)
+        # Productivity multiplier (HOW MUCH they catch - oligotrophic waters = less prey)
+        # HSI = min(chl / 0.5, 1.0) calculated in query_env_buffers
+        # Madeira is oligotrophic: typical chl ~0.1-0.3 mg/m³ → HSI ~0.2-0.6
+        hsi = final_check.get("hsi", 0.5)
+        # Apply minimum floor from config to prevent starvation in oligotrophic waters
+        productivity_multiplier = max(self.config.hsi_floor, hsi)
+
+        # Final rate = base × productivity × random variability
+        rate = base_rate * productivity_multiplier
         mass_gain = rate * random.uniform(0.5, 1.5)
 
         space = self.stomach_capacity - self.stomach_load
         actual_gain = min(space, mass_gain)
         self.stomach_load += actual_gain
         if actual_gain > 0:
-            self.log(f"Forage Eat: Depth={depth:.1f}m, Rate={rate}, Gained={actual_gain:.2f}kg")
+            self.log(
+                f"Forage Eat: Depth={depth:.1f}m, HSI={hsi:.2f}, "
+                f"Rate={rate:.2f}kg/h, Gained={actual_gain:.2f}kg"
+            )
 
             # UPDATE HOME POSITION: If we successfully foraged in valid water, update home
             # This prevents returning to coastline cells during panic
