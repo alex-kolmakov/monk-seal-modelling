@@ -7,32 +7,22 @@ The `SealAgent` is the core individual-based component of the Monk Seal ABM. It 
 This document focuses on the **scientific validation** of model parameters. For implementation details and tuning guidance, see the [Model Parameters & Tuning Guide](model_parameters.md).
 
 ## Agent State Machine
-The agent operates as a Finite State Machine (FSM). The transitions are driven by internal physiological variables (Energy, Stomach Load) and external environmental forcing (Tides, Storms, Food Availability).
 
-```mermaid
-stateDiagram-v2
-    [*] --> FORAGING
+The agent operates as a Finite State Machine (FSM). Transitions are driven by internal physiological variables (Energy, Stomach Load) and external environmental forcing (Tides, Storms, Food Availability).
 
-    state "FORAGING" as FORAGING
-    state "RESTING (Digesting @ Sea)" as RESTING
-    state "SLEEPING (Digesting @ Land)" as SLEEPING
-    state "HAULING_OUT" as HAULING_OUT
-    state "TRANSITING" as TRANSITING
+![Seal Agent State Machine](diagrams/seal_state_machine_diagram.png)
 
-    FORAGING --> RESTING : Stomach Full (>80%)
-    FORAGING --> HAULING_OUT : Low Tide / Storm / Full
-    FORAGING --> TRANSITING : No Food Locally
+> **Source file**: [diagrams/seal_state_machine.excalidraw](diagrams/seal_state_machine.excalidraw) — open at [excalidraw.com](https://excalidraw.com) to edit
 
-    RESTING --> FORAGING : Hungry & Rested
-    RESTING --> HAULING_OUT : Low Tide / Storm
-    RESTING --> SLEEPING : Land Reached
+**State Summary:**
 
-    HAULING_OUT --> SLEEPING : Land Reached (Safe)
-    HAULING_OUT --> RESTING : Storm (Abort Landing)
-
-    SLEEPING --> FORAGING : High Tide / Hungry
-    SLEEPING --> TRANSITING : High Tide (Evacuate Land)
-```
+| State | Location | Metabolic Rate | Energy Flow | Trigger to Exit |
+|:------|:---------|:---------------|:------------|:----------------|
+| FORAGING | Sea (0-50m) | AMR (750 kJ/h) | Stomach ↑ | Full, no food, or tide/storm |
+| RESTING | Sea | RMR (500 kJ/h) | Energy ↑ | Hungry, or land opportunity |
+| TRANSITING | Sea | AMR (750 kJ/h) | — | Reaches food patch |
+| HAULING_OUT | Sea→Land | AMR (750 kJ/h) | — | Reaches land or aborts |
+| SLEEPING | Land | RMR (500 kJ/h) | Energy ↑ | High tide or hungry |
 
 ## Scientific Validation of Parameters
 
