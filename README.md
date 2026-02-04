@@ -222,10 +222,10 @@ The project uses GitHub Actions for continuous integration:
 
 This model is based on research on the Mediterranean Monk Seal (*Monachus monachus*) population in the Madeira Archipelago. Key references:
 
-- **Tidal Activity**: [Pires et al. 2007](https://www.researchgate.net/publication/254846183) - Tide-driven behavior patterns
-- **Foraging Depths**: [Hale et al. 2011](https://www.aquaticmammalsjournal.org/wp-content/uploads/2011/08/37_3_Hale.pdf) - 95% of dives at 0-50m
-- **Storm Mortality**: [Gazo et al. 2000](https://www.researchgate.net/publication/227717823) - Pup survival and wave impacts
-- **Habitat**: [Karamanlidis et al. 2004](https://www.cambridge.org/core/journals/oryx/article/availability-of-resting-and-pupping-habitat-for-the-critically-endangered-mediterranean-monk-seal-monachus-monachus-in-the-archipelago-of-madeira/26FDF046B0B81D1A3DC707E722174931) - Cave suitability
+- **Tidal Activity**: [Pires et al. 2007](https://www.researchgate.net/publication/254846183) - Activity patterns of the Mediterranean monk seal in the Archipelago of Madeira
+- **Foraging Depths**: [Hale et al. 2011](https://www.aquaticmammalsjournal.org/wp-content/uploads/2011/08/37_3_Hale.pdf) - Mediterranean monk seal fishery interactions in the Archipelago of Madeira
+- **Storm Behavior**: [Gazo et al. 2000](https://www.researchgate.net/publication/227717823) - Storm impacts and shelter-seeking behavior in Mediterranean monk seals
+- **Habitat**: [Karamanlidis et al. 2004](https://www.cambridge.org/core/journals/oryx/article/availability-of-resting-and-pupping-habitat-for-the-critically-endangered-mediterranean-monk-seal-monachus-monachus-in-the-archipelago-of-madeira/26FDF046B0B81D1A3DC707E722174931) - Availability of resting and pupping habitat for the Mediterranean monk seal in the Archipelago of Madeira
 
 See [Seal Agent Documentation](docs/seal_agent_documentation.md) for complete parameter validation.
 
