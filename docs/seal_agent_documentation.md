@@ -26,40 +26,51 @@ The agent operates as a Finite State Machine (FSM). Transitions are driven by in
 
 ## Scientific Validation of Parameters
 
-All parameters are validated against research literature from the Monk Seal Knowledge Database. This section documents the scientific basis for each parameter choice.
+All parameters are validated against peer-reviewed research on Mediterranean monk seals. For tuning guidance and sensitivity analysis, see [Model Parameters & Tuning Guide](model_parameters.md).
 
-> **For tuning parameters**: See [Model Parameters & Tuning Guide](model_parameters.md) for how to adjust these values for different environments or sensitivity analyses.
+### Validated Parameters
 
-Parameters are categorized by validation status:
-- **✅ VALIDATED**: Directly supported by monk seal research
-- **✅ REASONABLE**: Biologically plausible based on observed behavior
-- **📊 MODEL PARAMETER**: Derived from allometric equations or model-specific
+These values are directly supported by monk seal field studies:
 
-| Category | Parameter | Value | Validation & Source |
-| :--- | :--- | :--- | :--- |
-| **Physiology** | Body Mass | 300 kg | ✅ **VALIDATED**: Adult females average 300kg, males 315-320kg. Range: 240-400kg. [Animal Diversity Web](https://animaldiversity.org/accounts/Monachus_monachus/), [Eastern Adriatic Monk Seal Project](https://adriaticmonkseal.org/biology/) |
-| **Physiology** | Stomach Capacity | 15 kg | ✅ **REASONABLE**: ~5% of body mass. Allows "binge feeding" of multiple Octopus vulgaris (1.25-2.4kg each). Juvenile necropsy: 1.25kg in "partially full" stomach (60kg individual). Daily intake is ~3kg. [Dendrinos et al. 2013](https://doi.org/10.3354/esr00554) |
-| **Physiology** | Daily Food Intake | 3 kg | ✅ **VALIDATED**: ~1% of body mass for maintenance. [Gazo et al. 2000](https://www.researchgate.net/publication/227717823) |
-| **Energetics** | RMR (Resting Metabolic Rate) | 500 kJ/h | 📊 **DERIVED**: Conservative estimate reflecting hypometabolism adaptation to oligotrophic Madeiran waters. Kleiber baseline (~880 kJ/h) reduced to account for low-productivity environment. [Costa & Williams 1999](https://doi.org/10.1560/IJEE.55.1-2.99) |
-| **Energetics** | AMR (Active Metabolic Rate) | 1.5 × RMR = 750 kJ/h | ✅ **REASONABLE**: Applied during FORAGING, TRANSITING, HAULING_OUT. AMR typically 1.5-3× RMR in pinnipeds. [Costa & Williams 1999](https://doi.org/10.1560/IJEE.55.1-2.99) |
-| **Energetics** | Digestion Rate | 1.0 kg/h (3500 units/h) | ✅ **REASONABLE**: Full stomach (15kg) requires ~15h rest to digest. Daily maintenance (3kg) requires ~3h. Biologically plausible for cephalopod/fish diet. |
-| **Energetics** | Starvation Threshold | 10% of max energy | 📊 **MODEL PARAMETER**: Based on general pinniped physiology. Requires validation through sensitivity analysis. |
-| **Energetics** | Critical Energy Level | 15% of max energy | 📊 **MODEL PARAMETER**: Based on general pinniped physiology. Requires validation through sensitivity analysis. |
-| **Foraging** | Shallow Zone (0-50m) | 3.0 kg/h base rate | ✅ **VALIDATED**: 95% of dives occur at 0-50m. Base rate modulated by HSI productivity. [Hale et al. 2011](https://www.aquaticmammalsjournal.org/wp-content/uploads/2011/08/37_3_Hale.pdf) |
-| **Foraging** | Medium Zone (50-100m) | 1.0 kg/h base rate | ✅ **REASONABLE**: Reduced intake reflects lower prey density. Base rate modulated by HSI productivity. |
-| **Foraging** | Deep Zone (>100m) | 0.0 kg/h intake | ✅ **REASONABLE**: Cannot reach benthos. Zero intake encourages seals to seek shallow continental shelf. [Hale et al. 2011](https://www.aquaticmammalsjournal.org/wp-content/uploads/2011/08/37_3_Hale.pdf) |
-| **Foraging** | Productivity Multiplier (HSI) | min(chl/0.5, 1.0) × base rate | ✅ **VALIDATED**: Chlorophyll modulates foraging yield. Madeira is oligotrophic (~0.1-0.3 mg/m³ chl). Floor of 0.3 prevents starvation. Depth = WHERE, productivity = HOW MUCH. |
-| **Foraging** | Foraging Depth Distribution | 0-50m: 95% of dives | ✅ **VALIDATED**: Most foraging in Madeira occurs 0-50m. Spot feeding observed <6m. Only 5% exceed 50m. [Hale et al. 2011](https://www.aquaticmammalsjournal.org/wp-content/uploads/2011/08/37_3_Hale.pdf), [Kiraç et al. 2002](https://www.researchgate.net/publication/301657846) |
-| **Foraging** | Maximum Dive Depth | 200m (capable) | ✅ **VALIDATED**: Dive to depths down to 200m, but regularly forage in shallower waters. [Eastern Adriatic Monk Seal Project](https://adriaticmonkseal.org/biology/) |
-| **Movement** | Swimming Speed | 5.5 km/h (0.05°/h) | ✅ **VALIDATED**: Max speed 16.8 km/h (juvenile). Daily travel: 40-81km (transit), 12-14km/day (localized). Model speed is conservative for sustained foraging. [Yiğit et al. 2018](https://www.researchgate.net/publication/327723234) |
-| **Movement** | Home Range | ~22 km (Desertas-Madeira) | ✅ **VALIDATED**: Generally sedentary with ~50km home range. Long-range: 288km over 3 months. [Adamantopoulou et al. 2011](https://www.aquaticmammalsjournal.org/wp-content/uploads/2011/08/37_3_Adamantopoulou.pdf) |
-| **Movement** | Island Proximity Boundary | 12 km | ✅ **VALIDATED**: Prevents unrealistic open-ocean dispersal while allowing inter-island movement. Seals are coastal and sedentary. [Karamanlidis et al. 2004](https://www.cambridge.org/core/journals/oryx/article/availability-of-resting-and-pupping-habitat-for-the-critically-endangered-mediterranean-monk-seal-monachus-monachus-in-the-archipelago-of-madeira/26FDF046B0B81D1A3DC707E722174931) |
-| **Environment** | Storm Threshold | 2.5m SWH | ✅ **VALIDATED**: Seals seek shelter when SWH >2.5m. Storms are leading cause of natural mortality. High swells flood cave beaches. [Gazo et al. 2000](https://www.researchgate.net/publication/227717823), [Karamanlidis et al. 2004](https://www.cambridge.org/core/journals/oryx/article/availability-of-resting-and-pupping-habitat-for-the-critically-endangered-mediterranean-monk-seal-monachus-monachus-in-the-archipelago-of-madeira/26FDF046B0B81D1A3DC707E722174931) |
-| **Environment** | Max Landing Swell | 4.0m SWH | ✅ **VALIDATED**: Wave heights >4.0m prevent safe hauling out. Physical danger of landing on rocky substrates during turbulence. [Karamanlidis et al. 2004](https://www.cambridge.org/core/journals/oryx/article/availability-of-resting-and-pupping-habitat-for-the-critically-endangered-mediterranean-monk-seal-monachus-monachus-in-the-archipelago-of-madeira/26FDF046B0B81D1A3DC707E722174931) |
-| **Tides** | Tidal Period | 12.4 hours (semidiurnal) | ✅ **VALIDATED**: Standard Atlantic semidiurnal tidal period. Caves flood at high tide forcing seals into water. Sighting rates 1.5× higher at high tide. [Pires et al. 2007](https://www.researchgate.net/publication/254846183), [Pires et al. 2008](https://www.cambridge.org/core/journals/oryx/article/critically-endangered-mediterranean-monk-seal-monachus-monachus-in-the-archipelago-of-madeira-priorities-for-conservation/307F69CCDC071125B306BBE9C7AC69D3) |
-| **Tides** | High Tide Threshold | 0.70 (70% of cycle) | ✅ **VALIDATED**: Seals forced into water when caves flood. Model prevents haul-out above this threshold. [Pires et al. 2007](https://www.researchgate.net/publication/254846183) |
-| **Tides** | Low Tide Threshold | 0.30 (30% of cycle) | ✅ **VALIDATED**: Seals can access cave beaches. Model enables haul-out below this threshold. [Pires et al. 2007](https://www.researchgate.net/publication/254846183) |
-| **Behavior** | Night Hours | 20:00-06:00 | ✅ **SUPERSEDED BY TIDES**: Day/night detection exists but **tidal forcing takes priority**. Hauling out determined by tide level, not time of day. [Pires et al. 2007](https://www.researchgate.net/publication/254846183) |
+| Parameter | Value | Source & Notes |
+|:----------|:------|:---------------|
+| Body Mass | 300 kg | Adult females average 300kg, males 315-320kg. Range: 240-400kg. [Animal Diversity Web](https://animaldiversity.org/accounts/Monachus_monachus/), [Eastern Adriatic Monk Seal Project](https://adriaticmonkseal.org/biology/) |
+| Daily Food Intake | 3 kg | ~1% of body mass for maintenance. [Gazo et al. 2000](https://www.researchgate.net/publication/227717823) |
+| Shallow Foraging (0-50m) | 3.0 kg/h | 95% of dives occur at 0-50m. Base rate modulated by HSI. [Hale et al. 2011](https://www.aquaticmammalsjournal.org/wp-content/uploads/2011/08/37_3_Hale.pdf) |
+| Foraging Depth Distribution | 95% at 0-50m | Spot feeding observed <6m. Only 5% exceed 50m. [Hale et al. 2011](https://www.aquaticmammalsjournal.org/wp-content/uploads/2011/08/37_3_Hale.pdf), [Kiraç et al. 2002](https://www.researchgate.net/publication/301657846) |
+| Maximum Dive Depth | 200m | Capable of 200m dives but regularly forage shallower. [Eastern Adriatic Monk Seal Project](https://adriaticmonkseal.org/biology/) |
+| HSI Productivity | min(chl/0.5, 1.0) | Chlorophyll modulates foraging yield. Madeira is oligotrophic (~0.1-0.3 mg/m³). |
+| Swimming Speed | 5.5 km/h | Max 16.8 km/h (juvenile). Daily travel: 40-81km transit, 12-14km localized. [Yiğit et al. 2018](https://www.researchgate.net/publication/327723234) |
+| Home Range | ~22 km | Sedentary with ~50km range. Long-range: 288km over 3 months. [Adamantopoulou et al. 2011](https://www.aquaticmammalsjournal.org/wp-content/uploads/2011/08/37_3_Adamantopoulou.pdf) |
+| Island Proximity | 12 km | Coastal and sedentary behavior. [Karamanlidis et al. 2004](https://www.cambridge.org/core/journals/oryx/article/availability-of-resting-and-pupping-habitat-for-the-critically-endangered-mediterranean-monk-seal-monachus-monachus-in-the-archipelago-of-madeira/26FDF046B0B81D1A3DC707E722174931) |
+| Storm Threshold | 2.5m SWH | Seals seek shelter above this. High swells flood cave beaches. [Gazo et al. 2000](https://www.researchgate.net/publication/227717823), [Karamanlidis et al. 2004](https://www.cambridge.org/core/journals/oryx/article/availability-of-resting-and-pupping-habitat-for-the-critically-endangered-mediterranean-monk-seal-monachus-monachus-in-the-archipelago-of-madeira/26FDF046B0B81D1A3DC707E722174931) |
+| Max Landing Swell | 4.0m SWH | Physical danger of landing on rocky substrates. [Karamanlidis et al. 2004](https://www.cambridge.org/core/journals/oryx/article/availability-of-resting-and-pupping-habitat-for-the-critically-endangered-mediterranean-monk-seal-monachus-monachus-in-the-archipelago-of-madeira/26FDF046B0B81D1A3DC707E722174931) |
+| Tidal Period | 12.4 hours | Atlantic semidiurnal tides. Sighting rates 1.5× higher at high tide. [Pires et al. 2007](https://www.researchgate.net/publication/254846183) |
+| High Tide Threshold | 0.70 | Caves flood, forcing seals into water. [Pires et al. 2007](https://www.researchgate.net/publication/254846183) |
+| Low Tide Threshold | 0.30 | Cave beaches accessible for haul-out. [Pires et al. 2007](https://www.researchgate.net/publication/254846183) |
+
+> **Note**: Madeira seals are tide-driven, not circadian. Day/night detection exists in code but tidal forcing takes priority. [Pires et al. 2007](https://www.researchgate.net/publication/254846183)
+
+### Biologically Reasonable Parameters
+
+These values lack direct monk seal measurements but are consistent with observed behavior and pinniped physiology:
+
+| Parameter | Value | Rationale |
+|:----------|:------|:----------|
+| Stomach Capacity | 15 kg | ~5% of body mass. Allows binge feeding of multiple octopus (1.25-2.4kg each). Supported by juvenile necropsy data. [Dendrinos et al. 2013](https://doi.org/10.3354/esr00554) |
+| AMR Multiplier | 1.5× RMR | Applied during active states. AMR typically 1.5-3× RMR in pinnipeds. [Costa & Williams 1999](https://doi.org/10.1560/IJEE.55.1-2.99) |
+| Digestion Rate | 1.0 kg/h | Full stomach (15kg) requires ~15h rest. Biologically plausible for cephalopod/fish diet. |
+| Medium Foraging (50-100m) | 1.0 kg/h | Reduced intake reflects lower prey density at depth. |
+| Deep Foraging (>100m) | 0.0 kg/h | Cannot reach benthos. Encourages seals to seek continental shelf. |
+
+### Model-Specific Parameters
+
+Parameters derived from allometric equations or requiring sensitivity analysis are documented in [Model Parameters & Tuning Guide](model_parameters.md):
+
+- **RMR** (500 kJ/h) — Derived from Kleiber equation with hypometabolism correction
+- **Starvation Threshold** (10%) — Based on general pinniped physiology
+- **Critical Energy Level** (15%) — Triggers desperate foraging behavior
+- **Energy-per-kg conversion** (3500 kJ/kg) — Model-specific unit mapping
 
 ## Digestion Model
 
