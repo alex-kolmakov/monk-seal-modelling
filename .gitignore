@@ -27,3 +27,6 @@ coverage.xml
 
 # Brain
 .gemini/
+
+# Articles (managed in Notion)
+docs/articles/
