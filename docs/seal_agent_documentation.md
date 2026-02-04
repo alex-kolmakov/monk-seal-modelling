@@ -1,7 +1,10 @@
-# Seal Agent Architecture & Parameter Assumptions
+# Seal Agent Architecture & Scientific Validation
 
 ## Overview
+
 The `SealAgent` is the core individual-based component of the Monk Seal ABM. It simulates the decision-making, physiology, and movement of a single *Monachus monachus* individual within the Madeiran archipelago.
+
+This document focuses on the **scientific validation** of model parameters. For implementation details and tuning guidance, see the [Model Parameters & Tuning Guide](model_parameters.md).
 
 ## Agent State Machine
 The agent operates as a Finite State Machine (FSM). The transitions are driven by internal physiological variables (Energy, Stomach Load) and external environmental forcing (Tides, Storms, Food Availability).
@@ -31,9 +34,13 @@ stateDiagram-v2
     SLEEPING --> TRANSITING : High Tide (Evacuate Land)
 ```
 
-## Model Parameters
+## Scientific Validation of Parameters
 
-All parameters are validated against research literature from the Monk Seal Knowledge Database. Parameters are categorized by validation status:
+All parameters are validated against research literature from the Monk Seal Knowledge Database. This section documents the scientific basis for each parameter choice.
+
+> **For tuning parameters**: See [Model Parameters & Tuning Guide](model_parameters.md) for how to adjust these values for different environments or sensitivity analyses.
+
+Parameters are categorized by validation status:
 - **✅ VALIDATED**: Directly supported by monk seal research
 - **✅ REASONABLE**: Biologically plausible based on observed behavior
 - **📊 MODEL PARAMETER**: Derived from allometric equations or model-specific
@@ -43,8 +50,8 @@ All parameters are validated against research literature from the Monk Seal Know
 | **Physiology** | Body Mass | 300 kg | ✅ **VALIDATED**: Adult females average 300kg, males 315-320kg. Range: 240-400kg. [Animal Diversity Web](https://animaldiversity.org/accounts/Monachus_monachus/), [Eastern Adriatic Monk Seal Project](https://adriaticmonkseal.org/biology/) |
 | **Physiology** | Stomach Capacity | 15 kg | ✅ **REASONABLE**: ~5% of body mass. Allows "binge feeding" of multiple Octopus vulgaris (1.25-2.4kg each). Juvenile necropsy: 1.25kg in "partially full" stomach (60kg individual). Daily intake is ~3kg. [Dendrinos et al. 2013](https://doi.org/10.3354/esr00554) |
 | **Physiology** | Daily Food Intake | 3 kg | ✅ **VALIDATED**: ~1% of body mass for maintenance. [Gazo et al. 2000](https://www.researchgate.net/publication/227717823) |
-| **Energetics** | RMR (Resting Metabolic Rate) | 753 kJ/h | 📊 **DERIVED**: Conservative estimate using Kleiber equation (RMR = 293 × M^0.75). Baseline terrestrial: ~880 kJ/h. Marine mammals typically 1.5-2× higher. Model uses lower value reflecting hypometabolism adaptation to oligotrophic Madeiran waters. [Costa & Williams 1999](https://doi.org/10.1560/IJEE.55.1-2.99) |
-| **Energetics** | AMR (Active Metabolic Rate) | 1.5 × RMR = 1129.5 kJ/h | ✅ **REASONABLE**: Applied during FORAGING, TRANSITING, HAULING_OUT. AMR typically 1.5-3× RMR in pinnipeds. [Costa & Williams 1999](https://doi.org/10.1560/IJEE.55.1-2.99) |
+| **Energetics** | RMR (Resting Metabolic Rate) | 500 kJ/h | 📊 **DERIVED**: Conservative estimate reflecting hypometabolism adaptation to oligotrophic Madeiran waters. Kleiber baseline (~880 kJ/h) reduced to account for low-productivity environment. [Costa & Williams 1999](https://doi.org/10.1560/IJEE.55.1-2.99) |
+| **Energetics** | AMR (Active Metabolic Rate) | 1.5 × RMR = 750 kJ/h | ✅ **REASONABLE**: Applied during FORAGING, TRANSITING, HAULING_OUT. AMR typically 1.5-3× RMR in pinnipeds. [Costa & Williams 1999](https://doi.org/10.1560/IJEE.55.1-2.99) |
 | **Energetics** | Digestion Rate | 1.0 kg/h (3500 units/h) | ✅ **REASONABLE**: Full stomach (15kg) requires ~15h rest to digest. Daily maintenance (3kg) requires ~3h. Biologically plausible for cephalopod/fish diet. |
 | **Energetics** | Starvation Threshold | 10% of max energy | 📊 **MODEL PARAMETER**: Based on general pinniped physiology. Requires validation through sensitivity analysis. |
 | **Energetics** | Critical Energy Level | 15% of max energy | 📊 **MODEL PARAMETER**: Based on general pinniped physiology. Requires validation through sensitivity analysis. |
@@ -70,11 +77,11 @@ The model separates **Foraging** (Ingestion) from **Digestion** (Energy Assimila
 
 - **Ingestion**: Agents fill stomach (max 15kg) based on depth/prey encounters. **No immediate energy gain.**
 - **Digestion**: Energy gained only during `RESTING` or `SLEEPING` states at 1 kg/hour rate.
-- **Metabolic Cost**: Constant RMR burn (753 kJ/h) during all states. Active states (FORAGING, TRANSITING, HAULING_OUT) apply 1.5× multiplier.
+- **Metabolic Cost**: Constant RMR burn (500 kJ/h) during all states. Active states (FORAGING, TRANSITING, HAULING_OUT) apply 1.5× multiplier.
 
 ## RMR Derivation Note
 
-The RMR value of **753 kJ/h** is derived using the Kleiber allometric equation with a conservative multiplier:
+The RMR value of **500 kJ/h** is derived using the Kleiber allometric equation with a hypometabolism correction:
 
 ```
 RMR = 293 × M^0.75  (terrestrial baseline)
@@ -83,7 +90,7 @@ RMR = 293 × M^0.75  (terrestrial baseline)
     ≈ 21,119 kJ/day ≈ 880 kJ/h (baseline)
 ```
 
-Marine mammals typically require 1.5-2× this baseline (~1,320-1,760 kJ/h). The model uses **753 kJ/h** (~0.85× baseline), reflecting:
+Marine mammals typically require 1.5-2× this baseline (~1,320-1,760 kJ/h). The model uses **500 kJ/h** (~0.57× baseline), reflecting:
 1. **Hypometabolism hypothesis**: Adaptation to oligotrophic (nutrient-poor) Madeiran waters
 2. **Conservative survival**: Allows survival on lower food intake (~3 kg/day)
 3. **Sensitivity requirement**: Should be tested through calibration against observed survival rates

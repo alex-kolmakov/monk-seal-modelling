@@ -175,6 +175,7 @@ monk-seal-modelling/
 | Document | Description |
 |----------|-------------|
 | [Seal Agent Architecture](docs/seal_agent_documentation.md) | Biological parameters, state machine, and scientific validation |
+| [Model Parameters & Tuning](docs/model_parameters.md) | Configuration reference and how to adjust parameters |
 | [Data Retrieval Guide](docs/copernicus_data_discovery.md) | Copernicus datasets, download process, tidal integration |
 | [Visualization Guide](docs/visualization_guide.md) | Animation tools and troubleshooting |
 
