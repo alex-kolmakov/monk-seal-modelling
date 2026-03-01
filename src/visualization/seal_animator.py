@@ -101,7 +101,7 @@ class SealBehaviorAnimator:
 
         # ── 4. Cache static background ─────────────────────────────────
         fig.canvas.draw()
-        background = fig.canvas.copy_from_bbox(fig.bbox)
+        background = fig.canvas.copy_from_bbox(fig.bbox)  # type: ignore[attr-defined]
 
         # ── 5. Render loop → ffmpeg pipe ───────────────────────────────
         fig_w = int(round(fig.get_figwidth() * dpi))
@@ -137,8 +137,8 @@ class SealBehaviorAnimator:
         lons = seal_data["lon"].values.astype(float)
         lats = seal_data["lat"].values.astype(float)
         states = seal_data["state"].values.astype(str)
-        energies = seal_data["energy"].values.astype(float)
-        stomachs = seal_data["stomach"].values.astype(float)
+        energies = seal_data["energy"].to_numpy(dtype=float)
+        stomachs = seal_data["stomach"].to_numpy(dtype=float)
         timestamps = seal_data["timestamp"].values.astype(str)
         agent_ids = seal_data["agent_id"].values.astype(str)
         depths = (
@@ -478,7 +478,7 @@ class ColonyAnimator:
         # frame boundaries are wrong (visible as two "halves" per frame).
         # The fix: do one draw() to settle everything, then read real dims.
         fig.canvas.draw()
-        _probe = np.asarray(fig.canvas.buffer_rgba())
+        _probe = np.asarray(fig.canvas.buffer_rgba())  # type: ignore[attr-defined]
         actual_h, actual_w = _probe.shape[:2]
         # yuv420p codec requires even pixel dimensions
         actual_w -= actual_w % 2
@@ -531,12 +531,12 @@ class ColonyAnimator:
         df_sub["_ai"] = df_sub["agent_id"].map(agent_to_idx)
         df_sub = df_sub.dropna(subset=["_ti", "_ai"])
 
-        ti = df_sub["_ti"].values.astype(int)
-        ai = df_sub["_ai"].values.astype(int)
-        lats_p[ti, ai] = df_sub["lat"].values
-        lons_p[ti, ai] = df_sub["lon"].values
-        states_p[ti, ai] = df_sub["state"].values
-        energies_p[ti, ai] = df_sub["energy"].values
+        ti = df_sub["_ti"].to_numpy(dtype=int)
+        ai = df_sub["_ai"].to_numpy(dtype=int)
+        lats_p[ti, ai] = df_sub["lat"].to_numpy(dtype=float)
+        lons_p[ti, ai] = df_sub["lon"].to_numpy(dtype=float)
+        states_p[ti, ai] = df_sub["state"].to_numpy(dtype=object)
+        energies_p[ti, ai] = df_sub["energy"].to_numpy(dtype=float)
 
         logger.info(f"  Pivot built: {n_frames} × {n_agents} arrays")
         return lats_p, lons_p, states_p, energies_p
@@ -564,10 +564,10 @@ class ColonyAnimator:
         # Cartopy may centre the map within its box (aspect enforcement)
         # but will never overflow past x = 0.60.
         ax_map = fig.add_axes(
-            [0.01, 0.05, 0.58, 0.90], projection=ccrs.PlateCarree()
+            (0.01, 0.05, 0.58, 0.90), projection=ccrs.PlateCarree()
         )
-        cbar_ax = fig.add_axes([0.605, 0.18, 0.016, 0.58])
-        ax_info = fig.add_axes([0.64, 0.05, 0.35, 0.90])
+        cbar_ax = fig.add_axes((0.605, 0.18, 0.016, 0.58))
+        ax_info = fig.add_axes((0.64, 0.05, 0.35, 0.90))
 
         # ── Map content ────────────────────────────────────────────────
         ax_map.set_extent(map_extent, crs=ccrs.PlateCarree())  # pyrefly: ignore
