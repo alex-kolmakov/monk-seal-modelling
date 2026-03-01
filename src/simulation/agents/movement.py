@@ -4,9 +4,6 @@ import numpy as np
 
 
 def correlated_random_walk(
-    data_in,
-    # data_in is dummy here, usually we'd need current_pos, current_heading
-    # But for a functional approach let's define args explicitly
     current_pos: tuple,
     current_heading: float,
     speed: float = 0.05,  # ~5km/step (Assuming 1 step = 1 hour)
@@ -61,6 +58,6 @@ def correlated_random_walk(
     step_size = speed
 
     new_lat = lat + step_size * math.sin(new_heading)
-    new_lon = lon + step_size * math.cos(new_heading)
+    new_lon = lon + step_size * math.cos(new_heading) / math.cos(math.radians(lat))
 
     return (new_lat, new_lon), new_heading

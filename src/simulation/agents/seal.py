@@ -23,6 +23,7 @@ class SealState(Enum):
 class SealMemory:
     haulout_sites: list[tuple[float, float]] = field(default_factory=list)
     high_hsi_patches: list[tuple[float, float]] = field(default_factory=list)
+    foraging_patches: list[tuple[float, float]] = field(default_factory=list)
     last_known_storm_pos: tuple[float, float] | None = None
 
 
@@ -84,6 +85,9 @@ class SealAgent:
         Multiprocessing-friendly update loop.
         Uses env_buffers (dict of numpy arrays) instead of Environment object.
         """
+        if self.state == SealState.DEAD:
+            return
+
         self.age_in_hours += 1
         hour_of_day = self.age_in_hours % 24
         is_night = hour_of_day >= 20 or hour_of_day < 6
@@ -170,6 +174,9 @@ class SealAgent:
         elif self.state == SealState.TRANSITING:
             self.transit(env_buffers)
 
+        elif self.state == SealState.RECOVERY:
+            self.recovery(env_data, env_buffers)
+
     # Legacy update (wraps buffers call if needed, but we should use update_with_buffers mainly)
     def update(self, env_data, environment=None):
         # Fallback for old calls if any
@@ -177,7 +184,7 @@ class SealAgent:
         raise NotImplementedError("Use update_with_buffers() for multiprocessing support")
 
     def decide_activity(self, env_data, is_night, is_land):
-        if self.state == "DEAD":
+        if self.state == SealState.DEAD:
             return
 
         # Tide Data (thresholds from config)
@@ -235,11 +242,14 @@ class SealAgent:
                      self.state = SealState.HAULING_OUT
                      return
 
-                # If we are exhausted, stay bottling
-                if self.energy > self.max_energy * 0.20:
-                     # Wake up check
-                     if self.stomach_load == 0:
-                         self.state = SealState.FORAGING
+                # Wake up check for bottling seal
+                if self.stomach_load == 0:
+                    # Critical override: nearly starving with nothing to digest — must eat now
+                    if self.energy < self.max_energy * self.config.critical_energy_threshold:
+                        self.state = SealState.FORAGING
+                    # Normal: not exhausted → wake and forage
+                    elif self.energy > self.max_energy * 0.20:
+                        self.state = SealState.FORAGING
                 return
 
             # On Land
@@ -261,17 +271,23 @@ class SealAgent:
                 self.state = SealState.HAULING_OUT
                 return
 
-            # Wake up if digested or hungry
-            if self.stomach_load == 0 and self.energy > self.max_energy * 0.9:
+            # Wake up when digestion is complete — resting purpose is digestion only
+            if self.stomach_load == 0:
                 self.state = SealState.FORAGING
             return
 
         # 4. FORAGING
         if self.state == SealState.FORAGING:
-            # Desperation Override
+            # Desperation Override: critically low energy, nothing to digest → keep eating
             is_desperate = self.energy < self.max_energy * 0.15 and self.stomach_load < 0.1
             if is_desperate:
                 return # Keep eating
+
+            # Recovery: critically low energy but has food in stomach → stop and digest
+            is_critical = self.energy < self.max_energy * self.config.critical_energy_threshold
+            if is_critical and self.stomach_load > 0:
+                self.state = SealState.RECOVERY
+                return
 
             # Tiredness / Satiety
             is_tired = self.energy < self.max_energy * 0.2
@@ -292,7 +308,21 @@ class SealAgent:
                  self.state = SealState.HAULING_OUT
                  return
 
-        # 5. TRANSITING
+        # 5. RECOVERY
+        if self.state == SealState.RECOVERY:
+            # Exit: recovered to 50% energy → return to normal activity
+            if self.energy > self.max_energy * 0.50:
+                self.state = SealState.FORAGING
+                return
+            # Stomach is empty and energy is above the critical floor: forage to refill.
+            # Staying in RECOVERY with nothing to digest guarantees starvation.
+            if self.stomach_load == 0 and self.energy > self.max_energy * self.config.critical_energy_threshold:
+                self.state = SealState.FORAGING
+                return
+            # Stay in RECOVERY while still digesting
+            return
+
+        # 6. TRANSITING
         if self.state == SealState.TRANSITING:
             # If we were transiting to escape land (Tide Panic), check if we are safe
             if not is_land:
@@ -473,6 +503,79 @@ class SealAgent:
 
         return None, None
 
+    def _find_nearest_shallow_water(self, env_buffers, max_radius_km=30.0, num_samples=36):
+        """Find nearest shallow water cell (depth ≤ 150 m, not land) within radius.
+
+        Used to provide a navigation target when a seal is stuck in deep water.
+        Madeira's shelf is narrow so we search up to 30 km.
+
+        Returns:
+            Tuple of (position, distance_km) or (None, None) if not found.
+        """
+        from math import cos, radians, sin
+
+        if env_buffers is None:
+            return None, None
+
+        max_radius_deg = max_radius_km / 111.0
+        num_circles = 15
+        best_pos = None
+        best_distance = float("inf")
+
+        for circle_idx in range(1, num_circles + 1):
+            radius_deg = (circle_idx / num_circles) * max_radius_deg
+
+            for i in range(num_samples):
+                angle = (i / num_samples) * 2 * 3.14159
+                sample_lat = self.pos[0] + radius_deg * math.cos(angle)
+                sample_lon = self.pos[1] + radius_deg * math.sin(angle) / math.cos(
+                    math.radians(self.pos[0])
+                )
+
+                data = query_env_buffers(sample_lat, sample_lon, env_buffers)
+                if data.get("is_land", False):
+                    continue
+                depth = data.get("depth")
+                if depth is None or depth > 150:
+                    continue
+
+                distance = self._calculate_distance_km(self.pos, (sample_lat, sample_lon))
+                if distance < best_distance:
+                    best_distance = distance
+                    best_pos = (sample_lat, sample_lon)
+
+        return (best_pos, best_distance) if best_pos else (None, None)
+
+    def _get_shelf_target(self, env_buffers):
+        """Return the best navigation target for shelf-seeking.
+
+        Checks remembered foraging patches first (fast, O(k)), then falls back
+        to a spatial search for the nearest shallow water cell (≤ 150 m depth).
+        Returns None if no target found, which causes _move_smart to use the
+        depth-sorted CRW fallback.
+        """
+        if self.memory.foraging_patches:
+            return min(
+                self.memory.foraging_patches,
+                key=lambda p: self._calculate_distance_km(self.pos, p),
+            )
+        target, _ = self._find_nearest_shallow_water(env_buffers)
+        return target
+
+    def _remember_foraging_patch(self):
+        """Store current position as a known good shallow foraging patch.
+
+        Only stores if no existing patch is within 2 km (avoids near-duplicates).
+        Caps at 10 entries using a FIFO eviction policy.
+        """
+        max_patches = 10
+        for p in self.memory.foraging_patches:
+            if self._calculate_distance_km(self.pos, p) < 2.0:
+                return
+        if len(self.memory.foraging_patches) >= max_patches:
+            self.memory.foraging_patches.pop(0)
+        self.memory.foraging_patches.append(self.pos)
+
     def _move_smart(
         self, env_buffers, intention="WATER", target_pos=None, speed=0.05
     ):
@@ -490,7 +593,7 @@ class SealAgent:
         """
         if env_buffers is None:
             self.pos, self.heading = correlated_random_walk(
-                None, self.pos, self.heading, speed=speed
+                self.pos, self.heading, speed=speed
             )
             return
 
@@ -583,7 +686,7 @@ class SealAgent:
              # Normal Movement: Correlated Random Walk (Momentum)
              for _ in range(10):
                 new_pos, new_heading = correlated_random_walk(
-                    None, self.pos, self.heading, speed=step_speed
+                    self.pos, self.heading, speed=step_speed
                 )
                 check_data = query_env_buffers(new_pos[0], new_pos[1], env_buffers)
                 candidates.append(
@@ -644,7 +747,22 @@ class SealAgent:
                     if not c_is_land and not path_crosses_land:
                         valid_candidates.append(c)
 
-            # Still nothing? Just use all candidates (Panic/Stuck)
+            # Still nothing? Try 360° uniform sampling to escape narrow passages.
+            # This avoids the UNSAFE fallback that can place seals on land.
+            if not valid_candidates and not currently_on_land:
+                for angle_i in range(20):
+                    esc_heading = angle_i * (2 * math.pi / 20)
+                    esc_lat = self.pos[0] + step_speed * math.cos(esc_heading)
+                    esc_lon = self.pos[1] + step_speed * math.sin(esc_heading) / math.cos(
+                        math.radians(self.pos[0])
+                    )
+                    esc_data = query_env_buffers(esc_lat, esc_lon, env_buffers)
+                    if not esc_data.get("is_land", False):
+                        valid_candidates.append(
+                            {"pos": (esc_lat, esc_lon), "heading": esc_heading, "data": esc_data}
+                        )
+
+            # Absolute last resort: allow all candidates (may include land)
             if not valid_candidates:
                 valid_candidates = candidates
                 self.log(
@@ -732,6 +850,20 @@ class SealAgent:
         self.heading = float(cast(float, best_c["heading"]))
 
     def forage(self, env_data, env_buffers):
+        # Land escape takes absolute priority — bathymetric depth looks shallow near
+        # coastlines, so stay_prob would incorrectly "stay" a seal stranded on a beach.
+        if env_data.get("is_land", False):
+            self.patch_residence_time = 0
+            self.log("On land - searching for nearest water to escape")
+            water_pos, water_dist = self._find_nearest_water(env_buffers, max_radius_km=5.0)
+            if water_pos:
+                self.log(f"WATER ESCAPE: Navigating to water at {water_dist:.2f}km")
+                self._move_smart(env_buffers, intention="WATER", target_pos=water_pos)
+            else:
+                self.log("WARNING: No water found nearby, trying random escape")
+                self._move_smart(env_buffers, intention="WATER", target_pos=None)
+            return  # No eating this step; seal just moved
+
         # 1. Determine Feed Mode based on Age
         is_adult = (
             self.age >= 6
@@ -818,7 +950,8 @@ class SealAgent:
                         depth = env_data.get("depth", 9999)
                         if depth > 100:
                             self.log(f"Forage Move. Depth={depth:.1f}m. Seeking Shelf.")
-                            self._move_smart(env_buffers, intention="SHELF", target_pos=None)
+                            target = self._get_shelf_target(env_buffers)
+                            self._move_smart(env_buffers, intention="SHELF", target_pos=target)
                         else:
                              self._move_smart(env_buffers, intention="WATER", target_pos=None)
                 pass
@@ -855,7 +988,8 @@ class SealAgent:
                 # Normal transit feeding in water
                 d_check = env_data.get("depth", 9999)
                 if d_check > 100:
-                    self._move_smart(env_buffers, intention="SHELF", target_pos=None)
+                    target = self._get_shelf_target(env_buffers)
+                    self._move_smart(env_buffers, intention="SHELF", target_pos=target)
                 else:
                     self._move_smart(env_buffers, intention="WATER", target_pos=None)
 
@@ -901,19 +1035,9 @@ class SealAgent:
                 f"Forage Eat: Depth={depth:.1f}m, HSI={hsi:.2f}, "
                 f"Rate={rate:.2f}kg/h, Gained={actual_gain:.2f}kg"
             )
-
-            # UPDATE HOME POSITION: If we successfully foraged in valid water, update home
-            # This prevents returning to coastline cells during panic
-            if depth < 100 and not final_check.get("is_land", False):
-                # This is a good foraging location - update home
-                self.memory.haulout_sites.append((self.pos[0], self.pos[1]))
-                # Keep only the most recent haulout site
-                if len(self.memory.haulout_sites) > 5:
-                    self.memory.haulout_sites.pop(0)
-                self.log(
-                    f"Updated home position to current foraging location "
-                    f"({self.pos[0]:.4f}, {self.pos[1]:.4f})"
-                )
+            # Remember shallow spots so future shelf-seeking is directed, not random
+            if depth <= 100:
+                self._remember_foraging_patch()
 
     def transit(self, env_buffers):
         # Check if we are stuck on land (e.g. High Tide Evacuation)
@@ -971,7 +1095,7 @@ class SealAgent:
     def rest(self, env_data, env_buffers):
         # Check tide - if low, maybe switch to hauling out?
         tide = env_data.get("tide", 0.5)
-        if tide < 0.30: # LOW_TIDE_THRESHOLD
+        if tide < self.config.low_tide_threshold:
              # We are resting in water, but tide is good for hauling out
              # Let decide_activity switch us next tick - just finish this rest step
              pass
@@ -990,7 +1114,7 @@ class SealAgent:
 
         # TIDE SAFETY CHECK:
         # If sleeping on land and tide rises, we must wake up and move!
-        if is_land and tide > 0.75: # HIGH_TIDE_THRESHOLD + buffer
+        if is_land and tide > self.config.high_tide_threshold:
              self.log(f"Waking up from sleep on land due to rising tide ({tide:.2f})!")
              self.state = SealState.FORAGING # Or TRANSIT
              return
@@ -1003,10 +1127,26 @@ class SealAgent:
 
         self.energy = min(self.energy, self.max_energy)
 
+    def recovery(self, env_data, env_buffers):
+        """Enhanced rest for critically low-energy seals with food in stomach.
+
+        Digests at 2× the normal rest rate — the seal is stationary and
+        prioritising energy recovery over any other activity.
+        No movement occurs during RECOVERY.
+        """
+        digestion_rate = 7000.0  # 2× the standard rest/sleep rate (3500 kJ/h)
+        if self.stomach_load > 0:
+            self.energy += digestion_rate
+            self.stomach_load -= digestion_rate / 3500.0
+            self.stomach_load = max(0, self.stomach_load)
+        self.energy = min(self.energy, self.max_energy)
+
     def burn_energy(self):
         # Active Metabolic Rate (AMR) = 1.5 * RMR for active states
         multiplier = 1.0
         if self.state in [SealState.FORAGING, SealState.TRANSITING, SealState.HAULING_OUT]:
             multiplier = 1.5
+        elif self.state == SealState.RECOVERY:
+            multiplier = 0.5  # Near-torpid during critical recovery; maximise digestion window
 
         self.energy -= self.rmr * multiplier

@@ -20,6 +20,7 @@ coverage.xml
 
 # OS
 .DS_Store
+.env
 
 # IDE
 .idea/

@@ -147,6 +147,7 @@ class DataDownloader:
                 minimum_latitude=config.region.min_lat,
                 maximum_latitude=config.region.max_lat,
                 overwrite=config.overwrite,
+                output_filename=spec.output_filename,
             )
 
             if success:
@@ -236,25 +237,39 @@ class DataDownloader:
         return results
 
 
-# Example configuration for Madeira region
+# Configuration for Madeira region (updated dataset IDs — IBI split into sub-datasets 2024)
 MADEIRA_CONFIG_EXAMPLE = DownloadConfig(
     output_dir=Path("data/real_long"),
     region=RegionBounds(min_lon=-17.5, max_lon=-16.0, min_lat=32.2, max_lat=33.5),
-    time_range=TimeRange(start_date="2023-01-01", end_date="2024-12-31"),
+    time_range=TimeRange(start_date="2022-01-01", end_date="2023-12-31"),
     datasets=[
+        # Temperature + depth levels (used for thetao and bathymetry computation)
         DatasetSpec(
-            dataset_id="cmems_mod_ibi_phy_my_0.027deg_P1D-m",
-            variables=["thetao", "uo", "vo", "so", "zos"],
+            dataset_id="cmems_mod_ibi_phy-temp_my_0.027deg_P1D-m",
+            variables=["thetao"],
+            output_filename="physics_2022_2023.nc",
         ),
+        # Currents (uo, vo)
         DatasetSpec(
-            dataset_id="cmems_mod_ibi_wav_my_0.05deg_PT1H-i", variables=["VHM0", "VMDR", "VTPK"]
+            dataset_id="cmems_mod_ibi_phy-cur_my_0.027deg_P1D-m",
+            variables=["uo", "vo"],
+            output_filename="currents_2022_2023.nc",
         ),
+        # Waves (significant wave height)
         DatasetSpec(
-            dataset_id="cmems_mod_ibi_bgc_my_0.027deg_P1D-m", variables=["chl", "o2", "no3", "po4"]
+            dataset_id="cmems_mod_ibi_wav_my_0.027deg_PT1H-i",
+            variables=["VHM0"],
+            output_filename="waves_2022_2023.nc",
+        ),
+        # BGC — chlorophyll from plankton sub-dataset
+        DatasetSpec(
+            dataset_id="cmems_mod_ibi_bgc-plankton_my_0.027deg_P1D-m",
+            variables=["chl"],
+            output_filename="bgc_2022_2023.nc",
         ),
     ],
     overwrite=True,
-    max_workers=3,
+    max_workers=4,
 )
 
 

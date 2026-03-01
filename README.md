@@ -76,59 +76,77 @@
 ### Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/alex-kolmakov/monk-seal-modelling.git
 cd monk-seal-modelling
-
-# Install dependencies
 uv sync
-
-# Install with dev/test dependencies
-uv sync --all-groups
 ```
 
-### Download Environmental Data
+### Credentials
 
-> **Note**: Requires [Copernicus Marine](https://marine.copernicus.eu/) account (free registration)
+Create a `.env` file in the project root with your [Copernicus Marine](https://marine.copernicus.eu/) credentials (free registration):
 
-```bash
-# Set credentials
-export CMEMS_USERNAME="your-username"
-export CMEMS_PASSWORD="your-password"
-
-# Download Madeira region data (2023-2024)
-uv run python -m src.data_ingestion.download_data --config madeira
-
-# Download tidal data
-uv run python -m src.data_ingestion.download_data --config tidal
+```
+COPERNICUS_USERNAME=your-username
+COPERNICUS_PASSWORD=your-password
 ```
 
-### Run Simulation
+### Run — Interactive Notebook (recommended)
 
 ```bash
-# Run 60-day simulation with 50 agents
+uv run marimo edit notebooks/explore.py
+```
+
+Opens a reactive notebook in your browser. Edit the **CONFIG** block at the top of the first cell:
+
+| Variable | Description |
+|---|---|
+| `DATE_FROM` / `DATE_TO` | Date range in `DD-MM-YYYY` format — any period, any length |
+| `DOWNLOAD_DATA` | Set `True` to fetch missing Copernicus files (uses `.env` credentials) |
+| `RUN_SIM` | Set `True` to run the simulation |
+| `NUM_AGENTS` | Number of seal agents (10–50 recommended) |
+| `RENDER_VIDEO` | Set `True` to export an MP4 after the simulation |
+
+Save (`Cmd/Ctrl+S`) to trigger reactive re-execution of dependent cells.
+
+### Run — Plain Script
+
+```bash
+# Edit DATE_FROM, DATE_TO, RUN_SIM etc. directly in the file, then:
+uv run python notebooks/explore.py
+```
+
+### Run — CLI
+
+```bash
+# Simulate 30 seals from 1 Jan 2024 to 31 Dec 2025 (730 days)
+# Data files must already exist in data/real_long/
 uv run python -m src.simulation.run_real_long \
-  --duration_days 60 \
-  --output_file data/real_long/simulation_results.csv
+  --from 01-01-2024 \
+  --to   31-12-2025 \
+  --agents 30 \
+  --seed 42
 
-# Output: simulation_results.csv + simulation_results_stats.csv
+# Output: data/real_long/long_sim_results.csv
+#         data/real_long/long_sim_results_stats.csv
 ```
 
 ### Visualize Results
 
 ```bash
-# Generate seal behavior animation
+# Colony animation (requires a completed simulation CSV)
 uv run python -m src.visualization.seal_animator \
-  --seal-csv data/real_long/simulation_results.csv \
-  --physics-file data/real_long/cmems_mod_ibi_phy_my_*.nc
+  --seal-csv data/real_long/sim_20240101_20251231_30seals_s42.csv \
+  --physics-file data/real_long/physics_20240101_20251231.nc
 
-# Generate weather/environment animation
+# Environmental animation
 uv run python -m src.visualization.weather_visualizer \
-  --physics data/real_long/cmems_mod_ibi_phy_my_*.nc \
-  --waves data/real_long/cmems_mod_ibi_wav_my_*.nc \
-  --bgc data/real_long/cmems_mod_ibi_bgc_my_*.nc \
-  --tidal data/real_long/tidal_2023_2024.nc
+  --physics  data/real_long/physics_20240101_20251231.nc \
+  --waves    data/real_long/waves_20240101_20251231.nc \
+  --bgc      data/real_long/bgc_20240101_20251231.nc \
+  --tidal    data/real_long/tidal_20240101_20251231.nc
 ```
+
+> **File naming**: all data files use a `YYYYMMDD_YYYYMMDD` tag derived from your chosen date range. The notebook handles this automatically.
 
 ---
 
@@ -225,10 +243,36 @@ This model is based on research on the Mediterranean Monk Seal (*Monachus monach
 
 - **Tidal Activity**: [Pires et al. 2007](https://www.researchgate.net/publication/254846183) - Activity patterns of the Mediterranean monk seal in the Archipelago of Madeira
 - **Foraging Depths**: [Hale et al. 2011](https://www.aquaticmammalsjournal.org/wp-content/uploads/2011/08/37_3_Hale.pdf) - Mediterranean monk seal fishery interactions in the Archipelago of Madeira
-- **Storm Behavior**: [Gazo et al. 2000](https://www.researchgate.net/publication/227717823) - Storm impacts and shelter-seeking behavior in Mediterranean monk seals
+- **Storm Effects on Population**: [Gazo et al. 2000](https://www.researchgate.net/publication/227717823) - Pup survival in the Mediterranean monk seal colony at Cabo Blanco Peninsula; documents storm-driven mortality and shelter use
 - **Habitat**: [Karamanlidis et al. 2004](https://www.cambridge.org/core/journals/oryx/article/availability-of-resting-and-pupping-habitat-for-the-critically-endangered-mediterranean-monk-seal-monachus-monachus-in-the-archipelago-of-madeira/26FDF046B0B81D1A3DC707E722174931) - Availability of resting and pupping habitat for the Mediterranean monk seal in the Archipelago of Madeira
 
 See [Seal Agent Documentation](docs/seal_agent_documentation.md) for complete parameter validation.
+
+---
+
+## 🔭 Seeking Guidance
+
+This model is an independent open-science effort and I actively seek feedback from researchers and practitioners. If you work with monk seals, ocean data, or agent-based ecology, your input would be invaluable:
+
+### Behavioural Parameter Validation
+
+The current parameters are drawn from published literature but many are uncertain or Madeira-specific. Would love expert review on:
+
+- **Tide thresholds** — `low_tide_threshold` (0.30) and `high_tide_threshold` (0.70) controlling cave access and haul-out timing
+- **Energy budgets** — `rmr = 500 kJ/h` (hypothesised hypometabolism for oligotrophic Madeira); does this match your field observations?
+- **Foraging rates** — `shallow_foraging_rate = 3.0 kg/h` at depths < 50 m; are these realistic for Madeira's prey community?
+
+### Activity Pattern Validation
+
+Do the simulated activity budgets (time spent foraging / resting / hauling out per day) match any telemetry or observation data for the Madeira population?
+
+### Model Extensions
+
+- **Greece / Cabo Blanco populations** — the model uses a `SealConfig` dataclass that makes porting to new populations straightforward. Happy to collaborate on calibrating parameters for other subpopulations.
+- **Pup and juvenile dynamics** — current model focuses on adult females; extending to age-structured populations is a planned future direction.
+- **Human disturbance** — the male risk feature is a stub; incorporating tourism pressure or fishing interaction data would strengthen demographic projections.
+
+If any of these resonate with your work, feel free to [open an issue](https://github.com/alex-kolmakov/monk-seal-modelling/issues) or reach out directly.
 
 ---
 

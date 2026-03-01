@@ -45,11 +45,21 @@ class Environment:
         # Ideally, we align all buffers to a single grid, but data might differ.
         # We will store: {internal_key: {'data': np.array, 'lat': np.array, 'lon': np.array}}
 
+        # Static bathymetry (set in load_data)
+        self.bathymetry_map = None
+
+        # Tidal dataset (set in load_data when SLA/ADT file detected)
+        self.tidal_dataset = None
+        self.tidal_variable: str | None = None
+        self.tidal_min: float = 0.0
+        self.tidal_max: float = 1.0
+
     def load_data(self, file_paths: list[str]):
         """Load multiple NetCDF files."""
         logger.info(f"Loading environment data from {len(file_paths)} files...")
         self.datasets = []
-        self.bathymetry_map = None  # Static bathymetry grid
+        self.bathymetry_map = None
+        self.tidal_dataset = None
 
         for fp in file_paths:
             try:
@@ -82,6 +92,26 @@ class Environment:
                         logger.info("Bathymetry map computed successfully.")
                     except Exception as e:
                         logger.warning(f"Failed to compute bathymetry: {e}")
+
+                # Detect tidal dataset by looking for SLA or ADT variables
+                for tidal_var in ("sla", "adt"):
+                    if tidal_var in ds.data_vars and self.tidal_dataset is None:
+                        try:
+                            # Spatial mean over all grid points for each timestep
+                            lat_dim = "lat" if "lat" in ds.dims else "latitude"
+                            lon_dim = "lon" if "lon" in ds.dims else "longitude"
+                            spatial_mean = ds[tidal_var].mean(dim=[lat_dim, lon_dim])
+                            self.tidal_dataset = ds
+                            self.tidal_variable = tidal_var
+                            self.tidal_min = float(spatial_mean.min())
+                            self.tidal_max = float(spatial_mean.max())
+                            logger.info(
+                                f"Tidal dataset detected ({tidal_var}) in {fp}. "
+                                f"Range: [{self.tidal_min:.3f}, {self.tidal_max:.3f}] m"
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to process tidal data from {fp}: {e}")
+                        break
 
                 self.datasets.append(ds)
                 logger.info(f"Loaded {fp}")
@@ -176,15 +206,30 @@ class Environment:
                 "shape": self.bathymetry_map.shape,
             }
 
-        # Add Tide (Simple Sine Wave, Period 12.4h)
-        # Store as scalar in buffers
-        try:
-            t_val = pd.Timestamp(self.current_time).value / (1e9 * 3600)  # hours
-            period = 12.4
-            # 0 = Low, 1 = High
-            self.buffers["tide"] = 0.5 * (1 + np.sin(2 * np.pi * t_val / period))
-        except Exception:
-            self.buffers["tide"] = 0.5
+        # Add Tide: real SLA data if available, otherwise sine-wave fallback
+        if self.tidal_dataset is not None:
+            try:
+                t = pd.Timestamp(self.current_time)
+                sla_slice = self.tidal_dataset[self.tidal_variable].sel(
+                    time=t, method="nearest"
+                )
+                # Spatial mean over the Madeira grid
+                sla_val = float(sla_slice.mean())
+                if self.tidal_max > self.tidal_min:
+                    tide = (sla_val - self.tidal_min) / (self.tidal_max - self.tidal_min)
+                    self.buffers["tide"] = float(np.clip(tide, 0.0, 1.0))
+                else:
+                    self.buffers["tide"] = 0.5
+            except Exception:
+                self.buffers["tide"] = 0.5
+        else:
+            # Fallback: simple sine wave (period 12.4h) when no tidal file loaded
+            try:
+                t_val = pd.Timestamp(self.current_time).value / (1e9 * 3600)  # hours
+                period = 12.4
+                self.buffers["tide"] = float(0.5 * (1 + np.sin(2 * np.pi * t_val / period)))
+            except Exception:
+                self.buffers["tide"] = 0.5
 
     def get_data_at_pos(
         self, lat: float, lon: float, time: pd.Timestamp | str | None = None

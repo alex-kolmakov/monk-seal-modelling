@@ -75,9 +75,11 @@ class SealAnimationConfig:
     # Animation settings
     fps: int = 10
     bitrate: int = 5000
+    step_hours: int = 6  # Render every Nth hour (6 = 4x fewer frames, ~4x faster)
 
     # Plot settings
     figsize: tuple[int, int] = (16, 10)
+    dpi: int = 100
     track_hours: int = 24  # Hours of track history to show
 
     # State colors

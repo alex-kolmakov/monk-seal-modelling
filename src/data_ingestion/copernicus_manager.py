@@ -481,6 +481,7 @@ class CopernicusManager:
         minimum_latitude: float | None = None,
         maximum_latitude: float | None = None,
         overwrite: bool = True,
+        output_filename: str | None = None,
     ) -> bool:
         """Download subset of data from a dataset.
 
@@ -541,7 +542,7 @@ class CopernicusManager:
         output_path.mkdir(parents=True, exist_ok=True)
 
         def _download() -> bool:
-            copernicusmarine.subset(
+            kwargs: dict = dict(
                 dataset_id=dataset_id,
                 output_directory=str(output_path),
                 start_datetime=start_date,
@@ -553,6 +554,9 @@ class CopernicusManager:
                 maximum_latitude=maximum_latitude,
                 overwrite=overwrite,
             )
+            if output_filename:
+                kwargs["output_filename"] = output_filename
+            copernicusmarine.subset(**kwargs)
             return True
 
         try:
