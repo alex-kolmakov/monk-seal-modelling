@@ -110,7 +110,9 @@ class Simulation:
             sex = "M" if np.random.random() > 0.5 else "F"
             age = np.random.randint(1, 20)
 
-            agent = SealAgent(agent_id=str(i), start_pos=(lat, lon), age=age, sex=sex, config=config)
+            agent = SealAgent(
+                agent_id=str(i), start_pos=(lat, lon), age=age, sex=sex, config=config
+            )
             self.agents.append(agent)
 
         logger.info(

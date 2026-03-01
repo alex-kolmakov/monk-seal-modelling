@@ -11,12 +11,8 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 from src.simulation.simulation import Simulation
-
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
 

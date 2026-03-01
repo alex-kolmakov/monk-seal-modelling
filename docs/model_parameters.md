@@ -40,13 +40,13 @@ custom_config = SealConfig(
 
 | Parameter | Default | Unit | Description |
 |-----------|---------|------|-------------|
-| `rmr` | 500.0 | kJ/h | Resting Metabolic Rate (energy burn at rest) |
+| `rmr` | 750.0 | kJ/h | Resting Metabolic Rate (energy burn at rest) |
 | `amr_multiplier` | 1.5 | - | Active Metabolic Rate multiplier (AMR = RMR × this) |
 
 **Tuning tips:**
 - `rmr` is the most sensitive parameter for survival outcomes
-- Lower RMR (400-500) = oligotrophic adaptation (Madeira)
-- Higher RMR (700-900) = productive environments (Cabo Blanco)
+- Lower RMR (500-650) = conservative/hypometabolism scenarios
+- Higher RMR (750-900) = standard phocid baseline (Madeira default)
 - `amr_multiplier` affects energy cost of foraging, transiting, and hauling out
 
 **Derivation:**
@@ -54,7 +54,8 @@ custom_config = SealConfig(
 Kleiber equation: RMR = 293 × M^0.75
 For 300kg seal: 293 × 72.08 ≈ 880 kJ/h (terrestrial baseline)
 Marine mammals: typically 1.5-2× higher (~1320-1760 kJ/h)
-Madeira model: uses 500 kJ/h (hypometabolism hypothesis)
+Phocid seals at rest: ~1.0–1.3× Kleiber (Lavigne et al. 1986)
+Madeira model: uses 750 kJ/h (~0.85× Kleiber, subtropical phocid baseline)
 ```
 
 ### Foraging Rates
@@ -135,7 +136,7 @@ effective_rate = base_foraging_rate × max(hsi_floor, hsi)
 **Tuning tips:**
 - Higher `digestion_rate` = faster recovery, shorter rest periods needed
 - `energy_per_kg_food` affects the energy balance equation directly
-- Daily maintenance requires ~3kg food → 10,500 kJ vs ~12,000 kJ daily burn (at 500 kJ/h RMR)
+- Daily maintenance requires ~3kg food → 10,500 kJ vs ~18,000 kJ daily burn (at 750 kJ/h RMR)
 
 ## Pre-configured Environments
 
@@ -145,7 +146,7 @@ Oligotrophic Atlantic environment with strong tidal forcing:
 
 ```python
 MADEIRA_CONFIG = SealConfig(
-    rmr=500.0,        # Hypometabolism adaptation
+    rmr=750.0,        # Phocid RMR baseline; food scarcity affects behaviour, not physiology
     hsi_floor=0.5,    # Higher floor for low-chlorophyll waters
 )
 ```

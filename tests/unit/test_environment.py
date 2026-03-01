@@ -10,15 +10,12 @@ Run: uv run pytest tests/unit/test_environment.py -v
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
 
 from src.simulation.environment.environment import Environment
-
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
 

@@ -2,7 +2,7 @@ import argparse
 import logging
 import os
 import random
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import numpy as np
 
@@ -34,7 +34,10 @@ def run_long_simulation(
         num_workers:   Parallel workers (default: os.cpu_count()).
         config:        SealConfig instance (None = use MADEIRA_CONFIG defaults).
     """
-    print(f"--- Monk Seal Simulation  start={start_time}  days={duration_days}  agents={num_agents} ---")
+    print(
+        f"--- Monk Seal Simulation  start={start_time}"
+        f"  days={duration_days}  agents={num_agents} ---"
+    )
 
     if seed is not None:
         print(f"Random seed: {seed}")

@@ -316,7 +316,8 @@ class SealAgent:
                 return
             # Stomach is empty and energy is above the critical floor: forage to refill.
             # Staying in RECOVERY with nothing to digest guarantees starvation.
-            if self.stomach_load == 0 and self.energy > self.max_energy * self.config.critical_energy_threshold:
+            above_critical = self.energy > self.max_energy * self.config.critical_energy_threshold
+            if self.stomach_load == 0 and above_critical:
                 self.state = SealState.FORAGING
                 return
             # Stay in RECOVERY while still digesting
@@ -512,7 +513,6 @@ class SealAgent:
         Returns:
             Tuple of (position, distance_km) or (None, None) if not found.
         """
-        from math import cos, radians, sin
 
         if env_buffers is None:
             return None, None

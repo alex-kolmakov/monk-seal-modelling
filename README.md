@@ -259,7 +259,7 @@ This model is an independent open-science effort and I actively seek feedback fr
 The current parameters are drawn from published literature but many are uncertain or Madeira-specific. Would love expert review on:
 
 - **Tide thresholds** — `low_tide_threshold` (0.30) and `high_tide_threshold` (0.70) controlling cave access and haul-out timing
-- **Energy budgets** — `rmr = 500 kJ/h` (hypothesised hypometabolism for oligotrophic Madeira); does this match your field observations?
+- **Energy budgets** — `rmr = 750 kJ/h` (~0.85× Kleiber for a 300kg subtropical phocid); does this match your field observations?
 - **Foraging rates** — `shallow_foraging_rate = 3.0 kg/h` at depths < 50 m; are these realistic for Madeira's prey community?
 
 ### Activity Pattern Validation

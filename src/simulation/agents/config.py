@@ -22,9 +22,9 @@ class SealConfig:
     # === METABOLIC RATES ===
     # RMR: Resting Metabolic Rate (kJ/h)
     # Kleiber baseline for 300kg: ~880 kJ/h
-    # Marine mammals typically 1.5-2x higher (~1320-1760 kJ/h)
-    # Madeira hypothesis: hypometabolism (~0.6x due to oligotrophic environment)
-    rmr: float = 500.0  # kJ/h - Conservative for oligotrophic Madeira
+    # Phocid seals at rest: ~1.0–1.3× Kleiber (Lavigne et al. 1986; Bowen & Lavigne 1987)
+    # 750 kJ/h ≈ 0.85× Kleiber — appropriate for subtropical phocid
+    rmr: float = 750.0  # kJ/h - Phocid RMR for 300kg subtropical seal
 
     # AMR multiplier (Active Metabolic Rate = RMR × this factor)
     amr_multiplier: float = 1.5  # Applied during FORAGING, TRANSITING, HAULING_OUT
@@ -60,6 +60,6 @@ class SealConfig:
 
 # Default configuration for Madeira (oligotrophic environment)
 MADEIRA_CONFIG = SealConfig(
-    rmr=500.0,  # Lower RMR for hypometabolism
+    rmr=750.0,  # Phocid RMR baseline; food scarcity affects behaviour, not physiology
     hsi_floor=0.5,  # Higher floor for oligotrophic waters
 )
