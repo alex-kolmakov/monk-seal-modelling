@@ -52,7 +52,7 @@
   <tr>
     <td width="50%" align="center">
       <strong>🦭 Seal Behavior Animation</strong><br><br>
-      <video src="https://github.com/user-attachments/assets/1b9c0662-f8e9-42ad-9829-58c74959f3b2" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/d2925b1e-9933-4059-a24e-f4783edc98b2" controls width="100%"></video>
     </td>
     <td width="50%" align="center">
       <strong>🌊 Weather & Environment</strong><br><br>
@@ -288,12 +288,6 @@ Contributions are welcome! Please:
 6. Commit your changes (`git commit -m 'Add amazing feature'`)
 7. Push to the branch (`git push origin feature/amazing-feature`)
 8. Open a Pull Request
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
