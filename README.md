@@ -52,7 +52,7 @@
   <tr>
     <td width="50%" align="center">
       <strong>🦭 Seal Behavior Animation</strong><br><br>
-      <video src="https://github.com/user-attachments/assets/1b9c0662-f8e9-42ad-9829-58c74959f3b2" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/d2925b1e-9933-4059-a24e-f4783edc98b2" controls width="100%"></video>
     </td>
     <td width="50%" align="center">
       <strong>🌊 Weather & Environment</strong><br><br>
