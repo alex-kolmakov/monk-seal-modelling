@@ -1,8 +1,10 @@
 import math
-import random
+import zlib
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, cast
+
+import numpy as np
 
 from src.simulation.agents.config import MADEIRA_CONFIG, SealConfig
 from src.simulation.agents.movement import correlated_random_walk
@@ -35,10 +37,16 @@ class SealAgent:
         age: int = 5,
         sex: str = "F",
         config: SealConfig | None = None,
+        seed: int | None = None,
     ):
         self.id = agent_id
         self.pos = start_pos
-        self.heading = random.uniform(0, 2 * math.pi)
+        # Per-agent RNG: the stream depends only on (seed, agent id), never on which
+        # worker process runs the agent. crc32 is stable across processes; hash() is not.
+        self.rng = np.random.default_rng(
+            None if seed is None else [seed, zlib.crc32(agent_id.encode())]
+        )
+        self.heading = self.rng.uniform(0, 2 * math.pi)
         self.age = age
         self.sex = sex
 
@@ -61,6 +69,7 @@ class SealAgent:
 
         # State
         self.state = SealState.FORAGING
+        self.death_cause: str | None = None
         if self.age == 0:
             self.state = SealState.RESTING  # Pups start resting/sleeping
 
@@ -132,14 +141,16 @@ class SealAgent:
         if self.sex == "M" and self.age >= 4:
             # Higher background mortality for adult males (approx 10% annual)
             # 0.1 / 8760 ~= 1e-5
-            if random.random() < 1.0e-5:
+            if self.rng.random() < 1.0e-5:
                 self.state = SealState.DEAD
+                self.death_cause = "male_risk"
                 return
 
         self.burn_energy()
         if self.energy <= self.max_energy * 0.10:
             self.log(f"DIED of Starvation (Critical Condition). Energy={self.energy:.1f}")
             self.state = SealState.DEAD
+            self.death_cause = "starvation"
             return
 
         old_state = self.state
@@ -593,7 +604,7 @@ class SealAgent:
         """
         if env_buffers is None:
             self.pos, self.heading = correlated_random_walk(
-                self.pos, self.heading, speed=speed
+                self.pos, self.heading, speed=speed, rng=self.rng
             )
             return
 
@@ -670,7 +681,7 @@ class SealAgent:
             # PANIC/ESCAPE: We are on land. Ignore momentum (CRW).
             # Sample 360 degrees uniformly to find water.
             for _ in range(20):  # More samples to ensure we find a valid move
-                new_heading = random.uniform(0, 2 * math.pi)
+                new_heading = self.rng.uniform(0, 2 * math.pi)
                 # Manual projection (simple approximation suffices for short steps)
                 new_lat = self.pos[0] + step_speed * math.cos(new_heading)
                 # Adjust lon for latitude (approx)
@@ -686,7 +697,7 @@ class SealAgent:
              # Normal Movement: Correlated Random Walk (Momentum)
              for _ in range(10):
                 new_pos, new_heading = correlated_random_walk(
-                    self.pos, self.heading, speed=step_speed
+                    self.pos, self.heading, speed=step_speed, rng=self.rng
                 )
                 check_data = query_env_buffers(new_pos[0], new_pos[1], env_buffers)
                 candidates.append(
@@ -778,7 +789,7 @@ class SealAgent:
             # 1. Try to find actual Land
             land_matches = [c for c in candidates if c["data"].get("is_land", False)]
             if land_matches:
-                best_c = random.choice(land_matches)
+                best_c = land_matches[self.rng.integers(len(land_matches))]
             else:
                  # Move towards target if exists
                  if target_pos:
@@ -788,7 +799,7 @@ class SealAgent:
                         + (c["pos"][1] - target_pos[1]) ** 2,
                     )
                  else:
-                     best_c = random.choice(candidates)
+                     best_c = candidates[self.rng.integers(len(candidates))]
 
         elif intention == "SHELF":
              # Prioritize Shallow Water (<100m)
@@ -836,13 +847,13 @@ class SealAgent:
                      and c["data"].get("depth", 9999) <= 100
                  ]
                  if shallow_candidates:
-                     best_c = random.choice(shallow_candidates)
+                     best_c = shallow_candidates[self.rng.integers(len(shallow_candidates))]
                  else:
-                     best_c = random.choice(candidates)
+                     best_c = candidates[self.rng.integers(len(candidates))]
 
         # Determine specific best_c if not set above (Fallback)
         if not best_c:
-            best_c = random.choice(candidates)
+            best_c = candidates[self.rng.integers(len(candidates))]
 
         # Execute Move
         best_pos = best_c["pos"]
@@ -901,7 +912,7 @@ class SealAgent:
             stay_prob = base_prob * (0.8**self.patch_residence_time)
 
             should_move = True
-            if random.random() < stay_prob:
+            if self.rng.random() < stay_prob:
                 should_move = False
 
             if should_move:
@@ -947,7 +958,10 @@ class SealAgent:
                             self._move_smart(env_buffers, intention="WATER", target_pos=None)
                     else:
                         # If deep, intention is SHELF. Else WATER (random foraging)
-                        depth = env_data.get("depth", 9999)
+                        # .get(k, 9999) returns None when the key holds None (off-grid)
+                        depth = env_data.get("depth")
+                        if depth is None:
+                            depth = 9999
                         if depth > 100:
                             self.log(f"Forage Move. Depth={depth:.1f}m. Seeking Shelf.")
                             target = self._get_shelf_target(env_buffers)
@@ -986,7 +1000,9 @@ class SealAgent:
                     self._move_smart(env_buffers, intention="WATER", target_pos=None)
             else:
                 # Normal transit feeding in water
-                d_check = env_data.get("depth", 9999)
+                d_check = env_data.get("depth")
+                if d_check is None:  # off-grid: treat as deep, like the re-read below
+                    d_check = 9999
                 if d_check > 100:
                     target = self._get_shelf_target(env_buffers)
                     self._move_smart(env_buffers, intention="SHELF", target_pos=target)
@@ -1025,7 +1041,7 @@ class SealAgent:
 
         # Final rate = base × productivity × random variability
         rate = base_rate * productivity_multiplier
-        mass_gain = rate * random.uniform(0.5, 1.5)
+        mass_gain = rate * self.rng.uniform(0.5, 1.5)
 
         space = self.stomach_capacity - self.stomach_load
         actual_gain = min(space, mass_gain)

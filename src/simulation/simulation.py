@@ -2,6 +2,7 @@ import logging
 import os
 from concurrent.futures import ProcessPoolExecutor
 from itertools import repeat
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -30,12 +31,20 @@ class Simulation:
         time_step_hours: int = 1,
         output_file: str = "simulation_results.csv",
         synthetic_tide: bool = False,
+        seed: int | None = None,
+        overwrite: bool = False,
     ):
         self.start_time = pd.Timestamp(start_time)
         self.current_time = self.start_time
         self.end_time = self.start_time + pd.Timedelta(days=duration_days)
         self.time_step = pd.Timedelta(hours=time_step_hours)
         self.output_file = output_file
+        self.overwrite = overwrite
+
+        # One seed drives spawning (self.rng) and every agent's own stream ([seed, id]).
+        # Without an explicit seed, draw one so the run can still be reproduced.
+        self.seed = seed if seed is not None else int(np.random.SeedSequence().entropy % 2**32)
+        self.rng = np.random.default_rng(self.seed)
 
         self.environment = Environment(synthetic_tide=synthetic_tide)
         self.agents: list[SealAgent] = []
@@ -43,6 +52,8 @@ class Simulation:
         # Track history for analysis (flushed to disk every 24 steps)
         self.history: list[dict] = []
         self.daily_stats: list[dict] = []
+        self.n_deaths_total = 0
+        self._n_deaths_since_stat = 0
 
         logger.info(
             f"Simulation Initialized: {self.start_time} to {self.end_time} (Step: {self.time_step})"
@@ -99,20 +110,25 @@ class Simulation:
 
         for i in range(num_agents):
             if valid_spawns:
-                idx = np.random.randint(0, len(valid_spawns))
+                idx = int(self.rng.integers(0, len(valid_spawns)))
                 lat, lon = valid_spawns[idx]
                 # Small jitter so agents don't all share the same grid cell
-                lat += np.random.uniform(-0.02, 0.02)
-                lon += np.random.uniform(-0.02, 0.02)
+                lat += self.rng.uniform(-0.02, 0.02)
+                lon += self.rng.uniform(-0.02, 0.02)
             else:
-                lat = start_lat + np.random.uniform(-0.05, 0.05)
-                lon = start_lon + np.random.uniform(-0.05, 0.05)
+                lat = start_lat + self.rng.uniform(-0.05, 0.05)
+                lon = start_lon + self.rng.uniform(-0.05, 0.05)
 
-            sex = "M" if np.random.random() > 0.5 else "F"
-            age = np.random.randint(1, 20)
+            sex = "M" if self.rng.random() > 0.5 else "F"
+            age = int(self.rng.integers(1, 20))
 
             agent = SealAgent(
-                agent_id=str(i), start_pos=(lat, lon), age=age, sex=sex, config=config
+                agent_id=str(i),
+                start_pos=(float(lat), float(lon)),
+                age=age,
+                sex=sex,
+                config=config,
+                seed=self.seed,
             )
             self.agents.append(agent)
 
@@ -124,6 +140,7 @@ class Simulation:
     def run(self, max_workers: int | None = None):
         """Run the simulation loop until end_time."""
         logger.info("Starting Simulation Loop...")
+        self._prepare_output_files()
 
         step_count = 0
 
@@ -164,10 +181,13 @@ class Simulation:
         new_agents = []
 
         for agent in results:
+            # Agents that died this step get one final DEAD row (with its cause),
+            # then leave the population. Earlier deaths never reach here.
             if agent.state == SealState.DEAD:
-                continue
-
-            active_agents.append(agent)
+                self.n_deaths_total += 1
+                self._n_deaths_since_stat += 1
+            else:
+                active_agents.append(agent)
 
             # Record History (Sequential)
             # Query env data again for history? Or agent carries it?
@@ -184,6 +204,7 @@ class Simulation:
                     "state": str(agent.state).split(".")[-1],
                     "energy": agent.energy,
                     "stomach": agent.stomach_load,
+                    "death_cause": agent.death_cause,
                     **env_data,
                 }
             )
@@ -202,10 +223,28 @@ class Simulation:
             stat = {
                 "date": self.current_time,
                 "total_agents": total_agents,
-                "avg_energy": avg_energy,
+                "avg_energy": avg_energy,  # survivors only; read with n_deaths_today
+                "n_deaths_today": self._n_deaths_since_stat,
+                "n_deaths_total": self.n_deaths_total,
             }
+            self._n_deaths_since_stat = 0
             self.daily_stats.append(stat)
             logger.info(f"Daily Stats: {stat}")
+
+    def _prepare_output_files(self):
+        """Refuse to append to an earlier run's CSVs (history is written in append mode)."""
+        stats_file = Path(self.output_file.replace(".csv", "_stats.csv"))
+        existing = [f for f in (Path(self.output_file), stats_file) if f.exists()]
+        if not existing:
+            return
+        if not self.overwrite:
+            raise FileExistsError(
+                f"Output already exists: {[str(f) for f in existing]}. "
+                "Pick a new output name or pass overwrite=True (--overwrite)."
+            )
+        for f in existing:
+            f.unlink()
+        logger.warning(f"Overwrote previous output: {[str(f) for f in existing]}")
 
     def _flush_history_if_due(self):
         """Append in-memory history to the output CSV and clear the list.

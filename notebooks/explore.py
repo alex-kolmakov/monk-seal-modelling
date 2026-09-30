@@ -181,7 +181,7 @@ def _pipeline(
         run_long_simulation(
             start_time=start_time, duration_days=duration_days,
             data_tag=tag, output_file=f"sim_{tag}_{NUM_AGENTS}seals_s{SEED}.csv",
-            seed=SEED, num_agents=NUM_AGENTS,
+            seed=SEED, num_agents=NUM_AGENTS, overwrite=True,
             config=SealConfig(rmr=RMR, hsi_floor=HSI_FLOOR,
                               low_tide_m=LOW_TIDE, high_tide_m=HIGH_TIDE,
                               storm_threshold=STORM_SWH),

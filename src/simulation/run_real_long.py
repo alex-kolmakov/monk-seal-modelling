@@ -2,10 +2,7 @@ import argparse
 import json
 import logging
 import os
-import random
 from datetime import datetime
-
-import numpy as np
 
 from src.simulation.environment.environment import TIDE_DATUM_M
 from src.simulation.simulation import Simulation
@@ -31,6 +28,7 @@ def run_long_simulation(
     num_workers: int | None = None,
     config=None,
     synthetic_tide: bool = False,
+    overwrite: bool = False,
 ):
     """Run a monk seal simulation for the given date range.
 
@@ -45,16 +43,12 @@ def run_long_simulation(
         num_workers:   Parallel workers (default: os.cpu_count()).
         config:        SealConfig instance (None = use MADEIRA_CONFIG defaults).
         synthetic_tide: Use the synthetic sine tide instead of ssh_{tag}.nc (IBI zos).
+        overwrite:     Replace an existing output CSV instead of refusing to run.
     """
     print(
         f"--- Monk Seal Simulation  start={start_time}"
         f"  days={duration_days}  agents={num_agents} ---"
     )
-
-    if seed is not None:
-        print(f"Random seed: {seed}")
-        random.seed(seed)
-        np.random.seed(seed)
 
     data_dir   = "data/real_long"
     output_csv = os.path.join(data_dir, output_file)
@@ -84,7 +78,10 @@ def run_long_simulation(
         time_step_hours=1,
         output_file=output_csv,
         synthetic_tide=synthetic_tide,
+        seed=seed,
+        overwrite=overwrite,
     )
+    print(f"Random seed: {sim.seed}")
 
     print("Loading Environment...")
     sim.load_environment(nc_files)
@@ -92,7 +89,7 @@ def run_long_simulation(
         output_csv,
         start_time=start_time,
         duration_days=duration_days,
-        seed=seed,
+        seed=sim.seed,
         num_agents=num_agents,
         num_workers=num_workers or os.cpu_count(),
         tide_source=sim.environment.tide_source,
@@ -124,6 +121,8 @@ if __name__ == "__main__":
     parser.add_argument("--workers", type=int, default=None)
     parser.add_argument("--synthetic-tide", action="store_true",
                         help="Use a 12.4 h sine tide instead of ssh_{tag}.nc (IBI zos)")
+    parser.add_argument("--overwrite", action="store_true",
+                        help="Replace an existing output CSV (default: refuse)")
     args = parser.parse_args()
 
     dt_from = datetime.strptime(args.date_from, "%d-%m-%Y")
@@ -140,4 +139,5 @@ if __name__ == "__main__":
         num_agents=args.agents,
         num_workers=args.workers,
         synthetic_tide=args.synthetic_tide,
+        overwrite=args.overwrite,
     )

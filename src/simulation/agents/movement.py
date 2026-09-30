@@ -10,6 +10,7 @@ def correlated_random_walk(
     tortuosity: float = 0.8,  # 1.0 = straight line, 0.0 = random
     bias_pos: tuple | None = None,
     bias_strength: float = 0.0,
+    rng: np.random.Generator | None = None,
 ) -> tuple:
     """
     Calculates next position using Correlated Random Walk.
@@ -21,7 +22,8 @@ def correlated_random_walk(
     # Von Mises distribution for directional persistence
     # concentration (kappa) ~ tortuosity
     kappa = tortuosity * 10
-    turn_angle = np.random.vonmises(0, kappa)
+    # rng: the agent's own generator, for reproducible runs; else the global one
+    turn_angle = (rng if rng is not None else np.random).vonmises(0, kappa)
 
     # 2. Apply Turn to Heading
     new_heading = current_heading + turn_angle
