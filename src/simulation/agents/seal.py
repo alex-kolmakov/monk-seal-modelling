@@ -61,6 +61,13 @@ class SealAgent:
         # Energy (from config)
         self.energy = self.config.initial_energy
         self.max_energy = self.config.max_energy
+
+        # Energy ledger (cumulative kJ): every hour, Δenergy = in - burned - discarded.
+        # "discarded" is surplus clipped at max_energy; it becomes stored mass once
+        # mass is a live state variable.
+        self.energy_in_kj = 0.0
+        self.energy_burned_kj = 0.0
+        self.energy_discarded_kj = 0.0
         self.rmr = self.config.rmr
 
         # Parental State
@@ -1116,13 +1123,7 @@ class SealAgent:
              # Let decide_activity switch us next tick - just finish this rest step
              pass
 
-        digestion_rate = 3500.0  # Adjusted for cephalopods
-        if self.stomach_load > 0:
-            self.energy += digestion_rate
-            self.stomach_load -= digestion_rate / 3500.0
-            self.stomach_load = max(0, self.stomach_load)
-        self.energy += 20.0
-        self.energy = min(self.energy, self.max_energy)
+        self._digest(self.config.digestion_rate)
 
     def sleep(self, env_data, env_buffers):
         tide = env_data.get("tide", 0.0)
@@ -1135,13 +1136,7 @@ class SealAgent:
              self.state = SealState.FORAGING # Or TRANSIT
              return
 
-        digestion_rate = 3500.0
-        if self.stomach_load > 0:
-            self.energy += digestion_rate
-            self.stomach_load -= digestion_rate / 3500.0
-            self.stomach_load = max(0, self.stomach_load)
-
-        self.energy = min(self.energy, self.max_energy)
+        self._digest(self.config.digestion_rate)
 
     def recovery(self, env_data, env_buffers):
         """Enhanced rest for critically low-energy seals with food in stomach.
@@ -1150,12 +1145,26 @@ class SealAgent:
         prioritising energy recovery over any other activity.
         No movement occurs during RECOVERY.
         """
-        digestion_rate = 7000.0  # 2× the standard rest/sleep rate (3500 kJ/h)
-        if self.stomach_load > 0:
-            self.energy += digestion_rate
-            self.stomach_load -= digestion_rate / 3500.0
-            self.stomach_load = max(0, self.stomach_load)
-        self.energy = min(self.energy, self.max_energy)
+        self._digest(2 * self.config.digestion_rate)  # 2× the standard rest/sleep rate
+
+    def _digest(self, kg_per_hour: float):
+        """Move food from stomach to energy: only what is actually in the stomach counts.
+
+        Replaces a flat credit (3,500 kJ, or 7,000 in RECOVERY) that was paid even when
+        less than 1 kg (2 kg) remained, and the +20 kJ/h that rest() added from nothing.
+        """
+        kg = min(self.stomach_load, kg_per_hour)
+        if kg <= 0:
+            return
+        self.stomach_load -= kg
+        gained = kg * self.config.energy_per_kg_food
+        self.energy += gained
+        self.energy_in_kj += gained
+
+        surplus = self.energy - self.max_energy
+        if surplus > 0:
+            self.energy = self.max_energy
+            self.energy_discarded_kj += surplus
 
     def burn_energy(self):
         # Active Metabolic Rate (AMR) = 1.5 * RMR for active states
@@ -1165,4 +1174,6 @@ class SealAgent:
         elif self.state == SealState.RECOVERY:
             multiplier = 0.5  # Near-torpid during critical recovery; maximise digestion window
 
-        self.energy -= self.rmr * multiplier
+        cost = self.rmr * multiplier
+        self.energy -= cost
+        self.energy_burned_kj += cost

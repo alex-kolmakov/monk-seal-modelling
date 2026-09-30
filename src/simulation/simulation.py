@@ -205,6 +205,9 @@ class Simulation:
                     "energy": agent.energy,
                     "stomach": agent.stomach_load,
                     "death_cause": agent.death_cause,
+                    "energy_in_kj": agent.energy_in_kj,
+                    "energy_burned_kj": agent.energy_burned_kj,
+                    "energy_discarded_kj": agent.energy_discarded_kj,
                     **env_data,
                 }
             )
