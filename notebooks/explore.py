@@ -42,8 +42,8 @@ def _config():
     RMR       = 750.0   # resting metabolic rate (kJ/h), literature range 300–800
     HSI_FLOOR = 0.5     # habitat quality floor — 0.1 permissive, 0.9 strict
     STORM_SWH = 2.5     # wave height (m) above which seals avoid landing
-    LOW_TIDE  = 0.30    # normalised tide for resting transitions (0–1)
-    HIGH_TIDE = 0.70    # normalised tide for sleeping transitions (0–1)
+    LOW_TIDE  = -0.30   # tide (m above mean sea level) below which cave beaches are exposed
+    HIGH_TIDE = 0.30    # tide (m above mean sea level) above which caves flood
 
     RENDER_VIDEO     = True  # set True to render MP4 after a successful run
     VIDEO_STEP_HOURS = 6      # hours between frames (1 = slow, 12 = fastest)
@@ -152,6 +152,7 @@ def _pipeline(
             DATA_DIR / f"currents_{tag}.nc",
             DATA_DIR / f"waves_{tag}.nc",
             DATA_DIR / f"bgc_{tag}.nc",
+            DATA_DIR / f"ssh_{tag}.nc",
         ] if not f.exists()]
 
     def download(tag, dt_from, dt_to):
@@ -170,14 +171,8 @@ def _pipeline(
                 DatasetSpec("cmems_mod_ibi_phy-cur_my_0.027deg_P1D-m",      ["uo", "vo"], f"currents_{tag}.nc"),
                 DatasetSpec("cmems_mod_ibi_wav_my_0.027deg_PT1H-i",         ["VHM0"],     f"waves_{tag}.nc"),
                 DatasetSpec("cmems_mod_ibi_bgc-plankton_my_0.027deg_P1D-m", ["chl"],      f"bgc_{tag}.nc"),
+                DatasetSpec("cmems_mod_ibi_phy-ssh_my_0.027deg_PT1H-m",     ["zos"],      f"ssh_{tag}.nc"),
             ],
-        ))
-        DataDownloader().download_batch(DownloadConfig(
-            output_dir=DATA_DIR,
-            region=RegionBounds(min_lon=-17.5, max_lon=-16.0, min_lat=32.0, max_lat=33.5),
-            time_range=tr,
-            datasets=[DatasetSpec("cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.25deg_P1D",
-                                  ["adt", "sla"], f"tidal_{tag}.nc")],
         ))
 
     def run_sim(tag, duration_days, start_time):
@@ -188,7 +183,7 @@ def _pipeline(
             data_tag=tag, output_file=f"sim_{tag}_{NUM_AGENTS}seals_s{SEED}.csv",
             seed=SEED, num_agents=NUM_AGENTS,
             config=SealConfig(rmr=RMR, hsi_floor=HSI_FLOOR,
-                              low_tide_threshold=LOW_TIDE, high_tide_threshold=HIGH_TIDE,
+                              low_tide_m=LOW_TIDE, high_tide_m=HIGH_TIDE,
                               storm_threshold=STORM_SWH),
         )
         return DATA_DIR / f"sim_{tag}_{NUM_AGENTS}seals_s{SEED}.csv"

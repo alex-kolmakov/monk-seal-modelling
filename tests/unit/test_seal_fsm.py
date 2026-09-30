@@ -45,7 +45,7 @@ def _buf(data: np.ndarray, lat: float = _LAT, lon: float = _LON) -> dict:
 
 
 def make_sea_buffers(
-    tide: float = 0.5,
+    tide: float = 0.0,
     swh: float = 0.5,
     depth: float = 30.0,
     chl: float = 0.5,
@@ -53,7 +53,8 @@ def make_sea_buffers(
     """3×3 open-water env_buffers centred at (_LAT, _LON).
 
     Note: `tide` is a top-level scalar in env_buffers, NOT a nested array —
-    see environment/utils.py:109 where it is read as buffers.get("tide", 0.5).
+    see environment/utils.py:109 where it is read as buffers.get("tide", 0.0).
+    Tide is metres above mean sea level (defaults: high +0.30, low -0.30).
     """
     return {
         "swh":   _buf(np.full((3, 3), swh)),
@@ -63,7 +64,7 @@ def make_sea_buffers(
     }
 
 
-def make_land_buffers(tide: float = 0.3, swh: float = 0.5) -> dict:
+def make_land_buffers(tide: float = -0.3, swh: float = 0.5) -> dict:
     """3×3 land env_buffers — all-NaN depth means query_env_buffers sets is_land=True.
 
     A 3×3 all-NaN neighbourhood means nan_count/total_count = 1.0 ≥ 0.5,
@@ -108,11 +109,11 @@ class TestForagingTransitions:
     def test_foraging_to_hauling_out_when_full_at_low_tide(self):
         """Full stomach + low tide → seize haul-out opportunity.
 
-        decide_activity:L291 — tide < low_tide_threshold AND stomach > 50%
+        decide_activity — tide < low_tide_m AND stomach > 50%
         capacity → HAULING_OUT.
         """
         seal = make_seal(state=SealState.FORAGING, stomach_load=12.0)  # 80% of 15 kg
-        env_data = {"tide": 0.2, "swh": 0.5, "is_land": False, "depth": 30.0}
+        env_data = {"tide": -0.45, "swh": 0.5, "is_land": False, "depth": 30.0}
         seal.decide_activity(env_data, is_night=False, is_land=False)
         assert seal.state == SealState.HAULING_OUT
 
@@ -123,14 +124,14 @@ class TestForagingTransitions:
         to actually trigger the satiety branch.
         """
         seal = make_seal(state=SealState.FORAGING, stomach_load=13.0)  # strictly > 0.8×15
-        env_data = {"tide": 0.5, "swh": 0.5, "is_land": False, "depth": 30.0}
+        env_data = {"tide": 0.0, "swh": 0.5, "is_land": False, "depth": 30.0}
         seal.decide_activity(env_data, is_night=False, is_land=False)
         assert seal.state == SealState.RESTING
 
     def test_foraging_continues_when_desperate(self):
         """Critically low energy overrides all transitions — seal keeps eating."""
         seal = make_seal(state=SealState.FORAGING, energy_pct=0.12, stomach_load=0.05)
-        env_data = {"tide": 0.2, "swh": 0.5, "is_land": False, "depth": 30.0}
+        env_data = {"tide": -0.45, "swh": 0.5, "is_land": False, "depth": 30.0}
         seal.decide_activity(env_data, is_night=False, is_land=False)
         assert seal.state == SealState.FORAGING
 
@@ -141,14 +142,14 @@ class TestSleepingTransitions:
     def test_sleeping_wakes_when_hungry_on_land(self):
         """Empty stomach on land → wake and forage (energy < 95% of max)."""
         seal = make_seal(state=SealState.SLEEPING, energy_pct=0.8, stomach_load=0.0)
-        env_data = {"tide": 0.4, "swh": 0.5, "is_land": True}
+        env_data = {"tide": -0.15, "swh": 0.5, "is_land": True}
         seal.decide_activity(env_data, is_night=False, is_land=True)
         assert seal.state == SealState.FORAGING
 
     def test_sleeping_continues_when_full_on_safe_land(self):
         """Full stomach on safe land → keep sleeping."""
         seal = make_seal(state=SealState.SLEEPING, energy_pct=0.9, stomach_load=10.0)
-        env_data = {"tide": 0.4, "swh": 0.5, "is_land": True}
+        env_data = {"tide": -0.15, "swh": 0.5, "is_land": True}
         seal.decide_activity(env_data, is_night=False, is_land=True)
         assert seal.state == SealState.SLEEPING
 
@@ -159,27 +160,27 @@ class TestTideForcing:
     def test_high_tide_cancels_haul_out_attempt_in_water(self):
         """HAULING_OUT in water + high tide → forced back to FORAGING."""
         seal = make_seal(state=SealState.HAULING_OUT)
-        env_data = {"tide": 0.8, "swh": 0.5, "is_land": False, "depth": 30.0}
+        env_data = {"tide": 0.45, "swh": 0.5, "is_land": False, "depth": 30.0}
         seal.decide_activity(env_data, is_night=False, is_land=False)
         assert seal.state == SealState.FORAGING
 
     def test_high_tide_evacuates_sleeping_seal_from_land(self):
         """SLEEPING on land at high tide → forced evacuation (TRANSITING)."""
         seal = make_seal(state=SealState.SLEEPING)
-        env_data = {"tide": 0.8, "swh": 0.5, "is_land": True}
+        env_data = {"tide": 0.45, "swh": 0.5, "is_land": True}
         seal.decide_activity(env_data, is_night=False, is_land=True)
         assert seal.state == SealState.TRANSITING
 
     def test_resting_uses_config_low_tide_threshold_for_haul_out(self):
-        """decide_activity reads low_tide_threshold from config, not a magic number.
+        """decide_activity reads low_tide_m from config, not a magic number.
 
-        With threshold=0.40, a tide of 0.35 (below threshold) triggers
-        HAULING_OUT from RESTING. This verifies the config-driven path in
-        decide_activity:L259, which is already correct.
+        With low_tide_m=-0.15, a tide of -0.225 m (below it, but above the
+        default -0.30) triggers HAULING_OUT from RESTING. This verifies the
+        config-driven path in decide_activity, which is already correct.
         """
-        config = SealConfig(low_tide_threshold=0.40)
+        config = SealConfig(low_tide_m=-0.15)
         seal = make_seal(state=SealState.RESTING, config=config)
-        env_data = {"tide": 0.35, "swh": 0.5, "is_land": False, "depth": 30.0}
+        env_data = {"tide": -0.225, "swh": 0.5, "is_land": False, "depth": 30.0}
         seal.decide_activity(env_data, is_night=False, is_land=False)
         assert seal.state == SealState.HAULING_OUT
 
@@ -196,14 +197,14 @@ class TestStormForcing:
         the seal in TRANSITING state (it's still escaping).
         """
         seal = make_seal(state=SealState.HAULING_OUT, energy_pct=0.9)
-        buffers = make_land_buffers(swh=5.0, tide=0.4)   # on land + extreme swell
+        buffers = make_land_buffers(swh=5.0, tide=-0.15)   # on land + extreme swell
         seal.update_with_buffers(buffers)
         assert seal.state == SealState.TRANSITING
 
     def test_storm_triggers_haul_out_from_open_water(self):
         """Storm swell (above storm_threshold 2.5 m) forces seal to seek land."""
         seal = make_seal(state=SealState.FORAGING, energy_pct=0.9)
-        buffers = make_sea_buffers(swh=3.0, tide=0.4)   # 3.0 > storm_threshold=2.5
+        buffers = make_sea_buffers(swh=3.0, tide=-0.15)   # 3.0 > storm_threshold=2.5
         seal.update_with_buffers(buffers)
         assert seal.state == SealState.HAULING_OUT
 
@@ -226,7 +227,7 @@ class TestDeathAndZombie:
     def test_dead_agent_decide_activity_preserves_dead_state(self):
         """decide_activity must be a no-op for dead agents under any conditions."""
         seal = make_seal(state=SealState.DEAD, energy_pct=0.5)
-        env_data = {"tide": 0.2, "swh": 0.5, "is_land": False, "depth": 30.0}
+        env_data = {"tide": -0.45, "swh": 0.5, "is_land": False, "depth": 30.0}
         seal.decide_activity(env_data, is_night=False, is_land=False)
         assert seal.state == SealState.DEAD
 
@@ -276,21 +277,21 @@ class TestRecoveryState:
             Add: if energy < critical AND stomach_load > 0 → RECOVERY
         """
         seal = make_seal(state=SealState.FORAGING, energy_pct=0.12, stomach_load=5.0)
-        env_data = {"tide": 0.5, "swh": 0.5, "is_land": False, "depth": 30.0}
+        env_data = {"tide": 0.0, "swh": 0.5, "is_land": False, "depth": 30.0}
         seal.decide_activity(env_data, is_night=False, is_land=False)
         assert seal.state == SealState.RECOVERY   # FAILS: no RECOVERY entry implemented
 
     def test_recovery_continues_while_critical_and_digesting(self):
         """Seal stays in RECOVERY while energy < 50% and stomach still has food."""
         seal = make_seal(state=SealState.RECOVERY, energy_pct=0.30, stomach_load=3.0)
-        env_data = {"tide": 0.5, "swh": 0.5, "is_land": False, "depth": 30.0}
+        env_data = {"tide": 0.0, "swh": 0.5, "is_land": False, "depth": 30.0}
         seal.decide_activity(env_data, is_night=False, is_land=False)
         assert seal.state == SealState.RECOVERY   # FAILS: no RECOVERY branch in decide_activity
 
     def test_recovery_exits_to_foraging_when_healthy(self):
         """RECOVERY seal with energy > 50% transitions back to FORAGING."""
         seal = make_seal(state=SealState.RECOVERY, energy_pct=0.60, stomach_load=2.0)
-        env_data = {"tide": 0.5, "swh": 0.5, "is_land": False, "depth": 30.0}
+        env_data = {"tide": 0.0, "swh": 0.5, "is_land": False, "depth": 30.0}
         seal.decide_activity(env_data, is_night=False, is_land=False)
         assert seal.state == SealState.FORAGING   # FAILS
 
@@ -303,13 +304,13 @@ class TestRecoveryState:
         # Rest baseline
         seal_r = make_seal(state=SealState.RESTING, stomach_load=5.0, energy_pct=0.5)
         energy_before_r = seal_r.energy
-        seal_r.rest({"tide": 0.5, "is_land": False}, {})
+        seal_r.rest({"tide": 0.0, "is_land": False}, {})
         rest_energy_gain = seal_r.energy - energy_before_r
 
         # Recovery
         seal_rec = make_seal(state=SealState.RECOVERY, stomach_load=5.0, energy_pct=0.5)
         energy_before_rec = seal_rec.energy
-        seal_rec.recovery({"tide": 0.5, "is_land": False}, {})   # FAILS: method missing
+        seal_rec.recovery({"tide": 0.0, "is_land": False}, {})   # FAILS: method missing
         recovery_energy_gain = seal_rec.energy - energy_before_rec
 
         assert recovery_energy_gain > rest_energy_gain, (
@@ -320,7 +321,7 @@ class TestRecoveryState:
         """recovery() action must not change the agent's position."""
         seal = make_seal(state=SealState.RECOVERY, stomach_load=3.0)
         initial_pos = seal.pos
-        seal.recovery({"tide": 0.5, "is_land": False}, {})   # FAILS: method missing
+        seal.recovery({"tide": 0.0, "is_land": False}, {})   # FAILS: method missing
         assert seal.pos == initial_pos
 
     def test_recovery_exits_when_stomach_empty_above_critical(self):
@@ -331,7 +332,7 @@ class TestRecoveryState:
         — the seal must re-enter FORAGING to refill before continuing recovery.
         """
         seal = make_seal(state=SealState.RECOVERY, energy_pct=0.25, stomach_load=0.0)
-        env_data = {"tide": 0.5, "swh": 0.5, "is_land": False, "depth": 30.0}
+        env_data = {"tide": 0.0, "swh": 0.5, "is_land": False, "depth": 30.0}
         seal.decide_activity(env_data, is_night=False, is_land=False)
         assert seal.state == SealState.FORAGING, (
             "RECOVERY seal with empty stomach must forage to refill, not starve in place"
@@ -357,27 +358,23 @@ class TestRecoveryState:
 
 
 class TestBugMagicThresholds:
-    """Bug #2 — sleep() uses hardcoded 0.75 instead of config.high_tide_threshold."""
+    """Bug #2 — sleep() used a hardcoded 0.75 instead of config.high_tide_m."""
 
     def test_sleep_wakes_at_config_high_tide_threshold(self):
-        """sleep() must honour config.high_tide_threshold, not the magic 0.75.
+        """sleep() must honour config.high_tide_m, not a magic number.
 
-        With high_tide_threshold=0.60, tide=0.70 exceeds the configured limit
-        and must wake the seal.  The current hardcoded 0.75 causes the seal to
-        stay asleep (0.70 < 0.75), silently ignoring the researcher's config.
-
-        Fix — seal.py:993:
-            if is_land and tide > 0.75:
-            →  if is_land and tide > self.config.high_tide_threshold:
+        With high_tide_m=0.15, a tide of 0.30 m exceeds the configured limit
+        and must wake the seal. The old hardcoded 0.75 (normalised; 0.375 m)
+        would have kept it asleep, silently ignoring the researcher's config.
         """
-        config = SealConfig(high_tide_threshold=0.60)
+        config = SealConfig(high_tide_m=0.15)
         seal = make_seal(state=SealState.SLEEPING, config=config)
-        env_data = {"tide": 0.70, "is_land": True}
+        env_data = {"tide": 0.3, "is_land": True}
 
         seal.sleep(env_data, {})
 
-        # 0.70 > config threshold 0.60 → must wake to FORAGING
-        assert seal.state == SealState.FORAGING   # FAILS (0.70 < hardcoded 0.75)
+        # 0.30 m > config threshold 0.15 m → must wake to FORAGING
+        assert seal.state == SealState.FORAGING
 
 
 class TestBugHauloutMemoryContamination:
@@ -445,7 +442,7 @@ class TestStarvationTraps:
             Added: if stomach_load == 0 and energy < critical_threshold → FORAGING
         """
         seal = make_seal(state=SealState.RESTING, energy_pct=0.12, stomach_load=0.0)
-        env_data = {"tide": 0.5, "swh": 0.5, "is_land": False, "depth": 30.0}
+        env_data = {"tide": 0.0, "swh": 0.5, "is_land": False, "depth": 30.0}
         seal.decide_activity(env_data, is_night=False, is_land=False)
         assert seal.state == SealState.FORAGING, (
             "critically starving RESTING seal with empty stomach must transition to FORAGING"
@@ -459,7 +456,7 @@ class TestStarvationTraps:
         The old 90%-threshold left seals trapped in RESTING until starvation.
         """
         seal = make_seal(state=SealState.RESTING, energy_pct=0.50, stomach_load=0.0)
-        env_data = {"tide": 0.5, "swh": 0.5, "is_land": False, "depth": 30.0}
+        env_data = {"tide": 0.0, "swh": 0.5, "is_land": False, "depth": 30.0}
         seal.decide_activity(env_data, is_night=False, is_land=False)
         assert seal.state == SealState.FORAGING, (
             "RESTING seal with empty stomach must transition to FORAGING (digestion complete)"
@@ -474,7 +471,7 @@ class TestStarvationTraps:
         """
         seal = make_seal(state=SealState.SLEEPING, energy_pct=0.12, stomach_load=0.0)
         # Bottling: is_land=False, tide mid-range (no tidal transition firing)
-        env_data = {"tide": 0.5, "swh": 0.5, "is_land": False}
+        env_data = {"tide": 0.0, "swh": 0.5, "is_land": False}
         seal.decide_activity(env_data, is_night=False, is_land=False)
         assert seal.state == SealState.FORAGING, (
             "critically starving bottling seal with empty stomach must transition to FORAGING"
@@ -488,7 +485,7 @@ class TestStarvationTraps:
         getting passive digestion — it should not be disturbed.
         """
         seal = make_seal(state=SealState.SLEEPING, energy_pct=0.12, stomach_load=5.0)
-        env_data = {"tide": 0.5, "swh": 0.5, "is_land": False}
+        env_data = {"tide": 0.0, "swh": 0.5, "is_land": False}
         seal.decide_activity(env_data, is_night=False, is_land=False)
         assert seal.state == SealState.SLEEPING, (
             "bottling seal with food in stomach should keep sleeping to digest"

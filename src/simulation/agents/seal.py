@@ -149,7 +149,7 @@ class SealAgent:
             self.state_duration = 0
             self.log(
                 f"State Change: State={self.state.name}. Night={is_night}, Land={is_land}, "
-                f"Tide={env_data.get('tide', 0.5):.2f}"
+                f"Tide={env_data.get('tide', 0.0):.2f}"
             )
             # Reset patch residence time if state changes
             if old_state == SealState.FORAGING:
@@ -188,9 +188,9 @@ class SealAgent:
             return
 
         # Tide Data (thresholds from config)
-        tide = env_data.get("tide", 0.5)
-        high_tide_threshold = self.config.high_tide_threshold
-        low_tide_threshold = self.config.low_tide_threshold
+        tide = env_data.get("tide", 0.0)
+        high_tide_threshold = self.config.high_tide_m
+        low_tide_threshold = self.config.low_tide_m
 
         # --- TIDE FORCING (Highest Priority) ---
         # High Tide: Must be in water (Forage/Transit)
@@ -1094,8 +1094,8 @@ class SealAgent:
 
     def rest(self, env_data, env_buffers):
         # Check tide - if low, maybe switch to hauling out?
-        tide = env_data.get("tide", 0.5)
-        if tide < self.config.low_tide_threshold:
+        tide = env_data.get("tide", 0.0)
+        if tide < self.config.low_tide_m:
              # We are resting in water, but tide is good for hauling out
              # Let decide_activity switch us next tick - just finish this rest step
              pass
@@ -1109,12 +1109,12 @@ class SealAgent:
         self.energy = min(self.energy, self.max_energy)
 
     def sleep(self, env_data, env_buffers):
-        tide = env_data.get("tide", 0.5)
+        tide = env_data.get("tide", 0.0)
         is_land = env_data.get("is_land", False)
 
         # TIDE SAFETY CHECK:
         # If sleeping on land and tide rises, we must wake up and move!
-        if is_land and tide > self.config.high_tide_threshold:
+        if is_land and tide > self.config.high_tide_m:
              self.log(f"Waking up from sleep on land due to rising tide ({tide:.2f})!")
              self.state = SealState.FORAGING # Or TRANSIT
              return

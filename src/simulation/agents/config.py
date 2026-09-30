@@ -45,9 +45,12 @@ class SealConfig:
     starvation_threshold: float = 0.10  # 10% of max energy = death
     critical_energy_threshold: float = 0.15  # 15% = desperate foraging mode
 
-    # === TIDAL THRESHOLDS ===
-    high_tide_threshold: float = 0.70  # Tide level that floods caves
-    low_tide_threshold: float = 0.30  # Tide level that exposes cave beaches
+    # === TIDAL THRESHOLDS (metres above mean sea level, see environment.TIDE_DATUM_M) ===
+    # PLACEHOLDERS: no cave-beach height reference yet [fact-check]. +/-0.30 m puts
+    # ~1/3 of hours above/below at the Desertas (IBI zos, Jan-May 2026), matching the
+    # share the old normalised 0.70/0.30 sine thresholds produced.
+    high_tide_m: float = 0.30  # Above this, caves flood
+    low_tide_m: float = -0.30  # Below this, cave beaches are exposed
 
     # === STORM THRESHOLDS ===
     storm_threshold: float = 2.5  # SWH (m) - Seals seek shelter

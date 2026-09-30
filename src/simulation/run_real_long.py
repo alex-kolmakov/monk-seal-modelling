@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import os
 import random
@@ -6,9 +7,18 @@ from datetime import datetime
 
 import numpy as np
 
+from src.simulation.environment.environment import TIDE_DATUM_M
 from src.simulation.simulation import Simulation
 
 logging.basicConfig(level=logging.INFO)
+
+
+def _write_run_metadata(output_csv: str, **fields) -> None:
+    """Write <output>_meta.json next to the results so every run records its inputs."""
+    meta_file = output_csv.replace(".csv", "_meta.json")
+    with open(meta_file, "w") as f:
+        json.dump(fields, f, indent=2, default=str)
+    print(f"Run metadata: {meta_file}")
 
 
 def run_long_simulation(
@@ -20,6 +30,7 @@ def run_long_simulation(
     num_agents: int = 1,
     num_workers: int | None = None,
     config=None,
+    synthetic_tide: bool = False,
 ):
     """Run a monk seal simulation for the given date range.
 
@@ -33,6 +44,7 @@ def run_long_simulation(
         num_agents:    Number of seal agents.
         num_workers:   Parallel workers (default: os.cpu_count()).
         config:        SealConfig instance (None = use MADEIRA_CONFIG defaults).
+        synthetic_tide: Use the synthetic sine tide instead of ssh_{tag}.nc (IBI zos).
     """
     print(
         f"--- Monk Seal Simulation  start={start_time}"
@@ -54,27 +66,40 @@ def run_long_simulation(
         os.path.join(data_dir, f"bgc_{data_tag}.nc"),       # chl
     ]
 
-    tidal_file = os.path.join(data_dir, f"tidal_{data_tag}.nc")
-    if os.path.exists(tidal_file):
-        nc_files.append(tidal_file)
-        print(f"Tidal data: {tidal_file}")
+    # Tide: IBI hourly zos. The synthetic sine is opt-in only, never a silent fallback.
+    tide_file = os.path.join(data_dir, f"ssh_{data_tag}.nc")
+    if synthetic_tide:
+        print("Tide: synthetic sine (--synthetic-tide)")
     else:
-        print("Tidal data: not found — sine-wave fallback will be used")
+        nc_files.append(tide_file)
+        print(f"Tide: {tide_file}")
 
     missing = [f for f in nc_files if not os.path.exists(f)]
     if missing:
-        print(f"Error: Missing data files: {missing}")
-        return
+        raise FileNotFoundError(f"Missing data files: {missing}")
 
     sim = Simulation(
         start_time=start_time,
         duration_days=duration_days,
         time_step_hours=1,
         output_file=output_csv,
+        synthetic_tide=synthetic_tide,
     )
 
     print("Loading Environment...")
     sim.load_environment(nc_files)
+    _write_run_metadata(
+        output_csv,
+        start_time=start_time,
+        duration_days=duration_days,
+        seed=seed,
+        num_agents=num_agents,
+        num_workers=num_workers or os.cpu_count(),
+        tide_source=sim.environment.tide_source,
+        tide_file=sim.environment.tide_file,
+        tide_datum_m=TIDE_DATUM_M,
+        nc_files=nc_files,
+    )
 
     # Desertas Islands: ~32.5N, 16.5W
     sim.create_agents(num_agents=num_agents, start_lat=32.5, start_lon=-16.5, config=config)
@@ -97,6 +122,8 @@ if __name__ == "__main__":
     parser.add_argument("--seed",    type=int, default=None)
     parser.add_argument("--agents",  type=int, default=1)
     parser.add_argument("--workers", type=int, default=None)
+    parser.add_argument("--synthetic-tide", action="store_true",
+                        help="Use a 12.4 h sine tide instead of ssh_{tag}.nc (IBI zos)")
     args = parser.parse_args()
 
     dt_from = datetime.strptime(args.date_from, "%d-%m-%Y")
@@ -112,4 +139,5 @@ if __name__ == "__main__":
         seed=args.seed,
         num_agents=args.agents,
         num_workers=args.workers,
+        synthetic_tide=args.synthetic_tide,
     )

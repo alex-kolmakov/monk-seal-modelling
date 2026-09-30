@@ -267,26 +267,16 @@ MADEIRA_CONFIG_EXAMPLE = DownloadConfig(
             variables=["chl"],
             output_filename="bgc_2022_2023.nc",
         ),
+        # Tide — hourly sea surface height. zos is tidal (a separate *_detided product
+        # exists), unlike DUACS SLA, which is daily with the tide removed.
+        DatasetSpec(
+            dataset_id="cmems_mod_ibi_phy-ssh_my_0.027deg_PT1H-m",
+            variables=["zos"],
+            output_filename="ssh_2022_2023.nc",
+        ),
     ],
     overwrite=True,
     max_workers=4,
-)
-
-
-# Tidal/sea level data configuration for Madeira region
-TIDAL_CONFIG_EXAMPLE = DownloadConfig(
-    output_dir=Path("data/real_long"),
-    region=RegionBounds(min_lon=-17.5, max_lon=-16.0, min_lat=32.0, max_lat=33.5),
-    time_range=TimeRange(start_date="2023-01-01", end_date="2024-12-31"),
-    datasets=[
-        DatasetSpec(
-            dataset_id="cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.25deg_P1D",
-            variables=["adt", "sla"],
-            output_filename="tidal_2023_2024.nc",
-        )
-    ],
-    overwrite=True,
-    max_workers=1,
 )
 
 
@@ -299,7 +289,7 @@ def main() -> None:
         "--config",
         type=str,
         default="madeira",
-        choices=["madeira", "tidal"],
+        choices=["madeira"],
         help="Predefined configuration to use",
     )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
@@ -314,8 +304,6 @@ def main() -> None:
     # Select configuration
     if args.config == "madeira":
         config = MADEIRA_CONFIG_EXAMPLE
-    elif args.config == "tidal":
-        config = TIDAL_CONFIG_EXAMPLE
     else:
         raise ValueError(f"Unknown config: {args.config}")
 

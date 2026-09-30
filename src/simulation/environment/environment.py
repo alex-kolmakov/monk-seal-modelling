@@ -10,14 +10,39 @@ from .utils import query_env_buffers
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Tide = IBI hourly sea surface height (zos, metres) averaged over the colony box,
+# measured from a fixed datum. zos is tidal (a separate *_detided product exists);
+# its Desertas mean is -0.23 m (Mar 2024) / -0.27 m (Jan-May 2026), so -0.25 m is
+# used as mean sea level. A fixed datum keeps thresholds comparable between runs.
+TIDE_VARIABLE = "zos"
+TIDE_DATUM_M = -0.25
+DESERTAS_BOX = {"lat": (32.35, 32.60), "lon": (-16.60, -16.40)}
+
+# Synthetic tide for tests and offline runs: a 12.4 h sine in metres.
+# 0.75 m ~ the M2 amplitude at Madeira; with the default +/-0.30 m thresholds it
+# crosses at sin = +/-0.4, the same points as the old normalised 0.70/0.30 sine.
+SYNTHETIC_TIDE_AMPLITUDE_M = 0.75
+SYNTHETIC_TIDE_PERIOD_H = 12.4
+
+# Daily de-tided altimetry was used as "tide" before; refuse it explicitly.
+NOT_A_TIDE_VARIABLES = ("sla", "adt")
+
+
+class TideDataError(RuntimeError):
+    """The tide source is missing, invalid, or does not cover the requested time."""
+
 
 class Environment:
     """
     Environment handler using Xarray for Copernicus Marine Data.
     Handles loading NetCDF files, spatial interpolation, and HSI calculation.
+
+    Args:
+        synthetic_tide: Allow the synthetic sine tide when no zos file is loaded.
+            Without it, update_buffers() raises instead of silently faking the tide.
     """
 
-    def __init__(self):
+    def __init__(self, synthetic_tide: bool = False):
         self.datasets: list[xr.Dataset] = []
 
         # Fallback defaults
@@ -48,18 +73,25 @@ class Environment:
         # Static bathymetry (set in load_data)
         self.bathymetry_map = None
 
-        # Tidal dataset (set in load_data when SLA/ADT file detected)
-        self.tidal_dataset = None
-        self.tidal_variable: str | None = None
-        self.tidal_min: float = 0.0
-        self.tidal_max: float = 1.0
+        # Tide height series in metres above TIDE_DATUM_M (set in load_data from zos)
+        self.synthetic_tide = synthetic_tide
+        self.tide_series: pd.Series | None = None
+        self.tide_file: str | None = None
+
+    @property
+    def tide_source(self) -> str:
+        """Where buffers['tide'] comes from, for run metadata."""
+        if self.tide_series is not None:
+            return f"ibi_{TIDE_VARIABLE}"
+        return "synthetic_sine" if self.synthetic_tide else "none"
 
     def load_data(self, file_paths: list[str]):
         """Load multiple NetCDF files."""
         logger.info(f"Loading environment data from {len(file_paths)} files...")
         self.datasets = []
         self.bathymetry_map = None
-        self.tidal_dataset = None
+        self.tide_series = None
+        self.tide_file = None
 
         for fp in file_paths:
             try:
@@ -93,30 +125,63 @@ class Environment:
                     except Exception as e:
                         logger.warning(f"Failed to compute bathymetry: {e}")
 
-                # Detect tidal dataset by looking for SLA or ADT variables
-                for tidal_var in ("sla", "adt"):
-                    if tidal_var in ds.data_vars and self.tidal_dataset is None:
-                        try:
-                            # Spatial mean over all grid points for each timestep
-                            lat_dim = "lat" if "lat" in ds.dims else "latitude"
-                            lon_dim = "lon" if "lon" in ds.dims else "longitude"
-                            spatial_mean = ds[tidal_var].mean(dim=[lat_dim, lon_dim])
-                            self.tidal_dataset = ds
-                            self.tidal_variable = tidal_var
-                            self.tidal_min = float(spatial_mean.min())
-                            self.tidal_max = float(spatial_mean.max())
-                            logger.info(
-                                f"Tidal dataset detected ({tidal_var}) in {fp}. "
-                                f"Range: [{self.tidal_min:.3f}, {self.tidal_max:.3f}] m"
-                            )
-                        except Exception as e:
-                            logger.warning(f"Failed to process tidal data from {fp}: {e}")
-                        break
+                if TIDE_VARIABLE in ds.data_vars:
+                    self._load_tide(ds, fp)
+                    continue
+                not_tides = [v for v in NOT_A_TIDE_VARIABLES if v in ds.data_vars]
+                if not_tides:
+                    raise TideDataError(
+                        f"{fp} holds {not_tides}: daily altimetry with the tide removed, "
+                        f"not a tide. Load IBI hourly '{TIDE_VARIABLE}' instead."
+                    )
 
                 self.datasets.append(ds)
                 logger.info(f"Loaded {fp}")
+            except TideDataError:
+                raise
             except Exception as e:
                 logger.error(f"Failed to load {fp}: {e}")
+
+    def _load_tide(self, ds: xr.Dataset, fp: str):
+        """Reduce hourly zos to a colony-mean height series in metres above the datum."""
+        if self.tide_series is not None:
+            raise TideDataError(f"Second tide file {fp}; already loaded {self.tide_file}")
+        (lat0, lat1), (lon0, lon1) = DESERTAS_BOX["lat"], DESERTAS_BOX["lon"]
+        box = ds[TIDE_VARIABLE].sel(lat=slice(lat0, lat1), lon=slice(lon0, lon1))
+        series = box.mean(dim=["lat", "lon"], skipna=True).to_series() - TIDE_DATUM_M
+        if series.isna().any() or len(series) < 2:
+            raise TideDataError(f"{fp}: no valid {TIDE_VARIABLE} in the Desertas box")
+        step = pd.Series(series.index).diff().dropna().unique()
+        if len(step) != 1 or step[0] != pd.Timedelta(hours=1):
+            raise TideDataError(f"{fp}: {TIDE_VARIABLE} must be hourly, got steps {step}")
+        self.tide_series = series
+        self.tide_file = fp
+        logger.info(
+            f"Tide: {TIDE_VARIABLE} from {fp}, {series.index[0]} -> {series.index[-1]}, "
+            f"{series.min():+.2f} .. {series.max():+.2f} m above {TIDE_DATUM_M} m datum"
+        )
+
+    def _tide_at(self, time: pd.Timestamp | str) -> float:
+        """Tide height (m above datum) at an hourly timestamp. Never wraps or clamps."""
+        t = pd.Timestamp(time)
+        if self.tide_series is not None:
+            idx = self.tide_series.index.get_indexer(
+                pd.DatetimeIndex([t]), method="nearest", tolerance=pd.Timedelta(minutes=30)
+            )[0]
+            if idx < 0:
+                raise TideDataError(
+                    f"No tide at {t}: {self.tide_file} covers "
+                    f"{self.tide_series.index[0]} -> {self.tide_series.index[-1]}"
+                )
+            return float(self.tide_series.iloc[idx])
+        if self.synthetic_tide:
+            hours = t.value / (1e9 * 3600)
+            phase = 2 * np.pi * hours / SYNTHETIC_TIDE_PERIOD_H
+            return float(SYNTHETIC_TIDE_AMPLITUDE_M * np.sin(phase))
+        raise TideDataError(
+            f"No tide source: load an IBI hourly '{TIDE_VARIABLE}' file "
+            "or construct Environment(synthetic_tide=True)"
+        )
 
     def update_buffers(self, time: pd.Timestamp | str):
         """Pre-fetch data for the current timestamp into numpy arrays."""
@@ -206,30 +271,8 @@ class Environment:
                 "shape": self.bathymetry_map.shape,
             }
 
-        # Add Tide: real SLA data if available, otherwise sine-wave fallback
-        if self.tidal_dataset is not None:
-            try:
-                t = pd.Timestamp(self.current_time)
-                sla_slice = self.tidal_dataset[self.tidal_variable].sel(
-                    time=t, method="nearest"
-                )
-                # Spatial mean over the Madeira grid
-                sla_val = float(sla_slice.mean())
-                if self.tidal_max > self.tidal_min:
-                    tide = (sla_val - self.tidal_min) / (self.tidal_max - self.tidal_min)
-                    self.buffers["tide"] = float(np.clip(tide, 0.0, 1.0))
-                else:
-                    self.buffers["tide"] = 0.5
-            except Exception:
-                self.buffers["tide"] = 0.5
-        else:
-            # Fallback: simple sine wave (period 12.4h) when no tidal file loaded
-            try:
-                t_val = pd.Timestamp(self.current_time).value / (1e9 * 3600)  # hours
-                period = 12.4
-                self.buffers["tide"] = float(0.5 * (1 + np.sin(2 * np.pi * t_val / period)))
-            except Exception:
-                self.buffers["tide"] = 0.5
+        # Tide: metres above TIDE_DATUM_M (scalar, colony-wide)
+        self.buffers["tide"] = self._tide_at(self.current_time)
 
     def get_data_at_pos(
         self, lat: float, lon: float, time: pd.Timestamp | str | None = None

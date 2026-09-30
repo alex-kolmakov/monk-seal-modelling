@@ -29,6 +29,7 @@ class Simulation:
         duration_days: int,
         time_step_hours: int = 1,
         output_file: str = "simulation_results.csv",
+        synthetic_tide: bool = False,
     ):
         self.start_time = pd.Timestamp(start_time)
         self.current_time = self.start_time
@@ -36,7 +37,7 @@ class Simulation:
         self.time_step = pd.Timedelta(hours=time_step_hours)
         self.output_file = output_file
 
-        self.environment = Environment()
+        self.environment = Environment(synthetic_tide=synthetic_tide)
         self.agents: list[SealAgent] = []
 
         # Track history for analysis (flushed to disk every 24 steps)

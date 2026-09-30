@@ -1,129 +1,158 @@
-"""Unit tests for the Environment class — tidal data loading.
+"""Unit tests for the Environment class — tide loading.
 
-TDD red phase — currently failing:
-    - TestTidalDataLoading::test_tidal_dataset_detected_on_load
-    - TestTidalDataLoading::test_buffers_tide_comes_from_dataset_not_sine_wave
-    - TestTidalDataLoading::test_tidal_fallback_to_sine_when_no_tidal_file
+The tide is IBI hourly sea surface height (zos) in metres above a fixed datum.
+It replaced DUACS SLA, which is daily and has the tide removed (a 12.4 h signal
+cannot survive daily sampling), and a silent sine-wave fallback.
 
 Run: uv run pytest tests/unit/test_environment.py -v
 """
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
 
-from src.simulation.environment.environment import Environment
+from src.simulation.environment.environment import (
+    SYNTHETIC_TIDE_AMPLITUDE_M,
+    TIDE_DATUM_M,
+    Environment,
+    TideDataError,
+)
+
+M2_PERIOD_H = 12.42
+S2_PERIOD_H = 12.00
+REAL_SSH_FILE = Path("data/real_long/ssh_20260101_20260530.nc")
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
 
-def make_fake_tidal_dataset(sla_value: float = 0.10) -> xr.Dataset:
-    """Minimal xarray Dataset that mimics the structure of tidal_2023_2024.nc.
 
-    The real file has:
-        dims: time(695), latitude(6), longitude(6)
-        vars: sla (sea level anomaly, metres), adt (absolute dynamic topography)
-
-    We create a 3-timestep, 2×2 dataset with a known, constant sla value so
-    that normalised tide output is predictable in tests.
-    """
-    times = pd.date_range("2023-01-01", periods=3, freq="D")
-    lats = np.array([32.12, 32.38], dtype=np.float32)
-    lons = np.array([-17.38, -17.12], dtype=np.float32)
-
-    # Vary sla across time so min/max normalisation is non-trivial
-    sla_data = np.full((3, 2, 2), sla_value, dtype=np.float64)
-    sla_data[0] = -0.10    # min
-    sla_data[2] =  0.20    # max
-    # Middle timestep = sla_value (default 0.10)
-
-    return xr.Dataset(
-        {"sla": (["time", "latitude", "longitude"], sla_data)},
-        coords={"time": times, "latitude": lats, "longitude": lons},
+def tide_signal(times: pd.DatetimeIndex) -> np.ndarray:
+    """M2 + S2 in metres (spring–neap beat), relative to mean sea level."""
+    hours = np.asarray((times - times[0]) / pd.Timedelta(hours=1))
+    return 0.75 * np.sin(2 * np.pi * hours / M2_PERIOD_H) + 0.25 * np.sin(
+        2 * np.pi * hours / S2_PERIOD_H
     )
 
 
-class TestTidalDataLoading:
-    """#4 — Environment must load and use real tidal SLA data from NetCDF."""
+def write_zos(tmp_path, times: pd.DatetimeIndex, name: str = "ssh.nc") -> str:
+    """Fake IBI zos file on a 2×2 grid inside the Desertas box, one land (NaN) cell.
 
-    def test_tidal_dataset_detected_on_load(self, tmp_path):
-        """After loading a file containing 'sla', the environment stores tidal metadata.
+    zos = datum + tide signal, as in the real product (model mean ~ -0.25 m).
+    """
+    signal = tide_signal(times)
+    data = np.repeat(signal[:, None, None], 2, axis=1).repeat(2, axis=2) + TIDE_DATUM_M
+    data[:, 0, 0] = np.nan  # land
+    ds = xr.Dataset(
+        {"zos": (["time", "latitude", "longitude"], data)},
+        coords={
+            "time": times,
+            "latitude": np.array([32.40, 32.50], dtype=np.float32),
+            "longitude": np.array([-16.55, -16.45], dtype=np.float32),
+        },
+    )
+    path = str(tmp_path / name)
+    ds.to_netcdf(path)
+    return path
 
-        Fix — environment.py load_data():
-            Detect 'sla' or 'adt' variable in a loaded dataset and set:
-                self.tidal_dataset   (the xr.Dataset)
-                self.tidal_variable  ('sla' or 'adt')
-                self.tidal_min / self.tidal_max  (pre-computed spatial-mean bounds)
-        """
-        ds = make_fake_tidal_dataset()
-        nc_path = str(tmp_path / "tidal.nc")
-        ds.to_netcdf(nc_path)
 
+def tide_series_via_buffers(env: Environment, times: pd.DatetimeIndex) -> np.ndarray:
+    values = []
+    for t in times:
+        env.update_buffers(t)
+        values.append(env.buffers["tide"])
+    return np.array(values)
+
+
+def assert_semidiurnal(tide: np.ndarray) -> None:
+    """Dominant period 12–13 h and >= 50 crossings of the mean in 30 days."""
+    x = tide - tide.mean()
+    freqs = np.fft.rfftfreq(len(x), d=1.0)
+    power = np.abs(np.fft.rfft(x)) ** 2
+    dominant = 1 / freqs[power[1:].argmax() + 1]
+    crossings = int(((x[:-1] < 0) != (x[1:] < 0)).sum())
+    assert 12.0 <= dominant <= 13.0, f"dominant period {dominant:.1f} h, expected 12–13 h"
+    assert crossings >= 50, f"{crossings} mean crossings in 30 days, expected >= 50"
+
+
+HOURS_30D = pd.date_range("2026-03-01", periods=30 * 24, freq="h")
+
+# ─── TESTS ───────────────────────────────────────────────────────────────────
+
+
+class TestTideFromZos:
+    def test_tide_is_metres_above_datum_not_normalised(self, tmp_path):
+        """buffers['tide'] = zos - datum, in metres: no per-file min–max scaling."""
         env = Environment()
-        env.load_data([nc_path])
+        env.load_data([write_zos(tmp_path, HOURS_30D)])
 
-        assert hasattr(env, "tidal_dataset"), "tidal_dataset must be set after loading"   # FAILS
-        assert env.tidal_variable == "sla"
-        assert env.tidal_min < env.tidal_max
+        tide = tide_series_via_buffers(env, HOURS_30D[:48])
 
-    def test_buffers_tide_comes_from_dataset_not_sine_wave(self, tmp_path):
-        """buffers['tide'] must be interpolated from SLA, not from a sine wave.
+        np.testing.assert_allclose(tide, tide_signal(HOURS_30D)[:48], atol=1e-6)
+        assert env.tide_source == "ibi_zos"
+        assert tide.min() < -0.5 and tide.max() > 0.5, "metres, not squeezed into [0, 1]"
 
-        Strategy:
-            - Build a fake tidal dataset with known SLA at a specific timestamp.
-            - The middle timestep has sla=0.10.  With min=-0.10 and max=0.20:
-                  normalised = (0.10 - (-0.10)) / (0.20 - (-0.10)) = 0.20/0.30 ≈ 0.667
-            - The sine wave at the same timestamp would produce a completely
-              different value, confirming the source changed.
-
-        Fix — environment.py update_buffers():
-            Replace the sine-wave block with:
-                if hasattr(self, 'tidal_dataset') and self.tidal_dataset is not None:
-                    use the dataset
-                else:
-                    fall back to sine wave
-        """
-        ds = make_fake_tidal_dataset(sla_value=0.10)
-        nc_path = str(tmp_path / "tidal.nc")
-        ds.to_netcdf(nc_path)
-
+    def test_tide_is_semidiurnal(self, tmp_path):
         env = Environment()
-        env.load_data([nc_path])
-        env.update_buffers("2023-01-02")   # middle timestep → sla ≈ 0.10
+        env.load_data([write_zos(tmp_path, HOURS_30D)])
 
-        tide = env.buffers["tide"]
-        expected = (0.10 - (-0.10)) / (0.20 - (-0.10))   # ≈ 0.667
+        assert_semidiurnal(tide_series_via_buffers(env, HOURS_30D))
 
-        assert isinstance(tide, float)
-        assert tide == pytest.approx(expected, abs=0.05), (   # FAILS
-            f"expected tide ≈ {expected:.3f} from SLA, got {tide:.3f} (sine wave?)"
+    @pytest.mark.skipif(not REAL_SSH_FILE.exists(), reason=f"{REAL_SSH_FILE} not downloaded")
+    def test_real_ibi_zos_tide_is_semidiurnal(self):
+        """The downloaded IBI product itself carries the tide at the Desertas."""
+        env = Environment()
+        env.load_data([str(REAL_SSH_FILE)])
+
+        assert_semidiurnal(tide_series_via_buffers(env, HOURS_30D))
+
+    def test_time_outside_file_raises_instead_of_wrapping(self, tmp_path):
+        env = Environment()
+        env.load_data([write_zos(tmp_path, HOURS_30D)])
+
+        with pytest.raises(TideDataError, match="No tide at"):
+            env.update_buffers(HOURS_30D[-1] + pd.Timedelta(hours=1))
+
+    def test_daily_zos_rejected(self, tmp_path):
+        daily = pd.date_range("2026-03-01", periods=30, freq="D")
+        env = Environment()
+
+        with pytest.raises(TideDataError, match="hourly"):
+            env.load_data([write_zos(tmp_path, daily)])
+
+
+class TestNoSilentFallback:
+    def test_no_tide_source_raises(self):
+        env = Environment()
+
+        with pytest.raises(TideDataError, match="No tide source"):
+            env.update_buffers("2026-03-01 06:00")
+
+    def test_sla_file_rejected(self, tmp_path):
+        """DUACS SLA is de-tided daily altimetry; loading it must fail loudly."""
+        days = pd.date_range("2024-01-01", periods=3, freq="D")
+        ds = xr.Dataset(
+            {"sla": (["time", "latitude", "longitude"], np.zeros((3, 2, 2)))},
+            coords={"time": days, "latitude": [32.4, 32.5], "longitude": [-16.55, -16.45]},
         )
+        path = str(tmp_path / "tidal.nc")
+        ds.to_netcdf(path)
 
-    def test_tidal_fallback_to_sine_when_no_tidal_file(self):
-        """Without a tidal file, update_buffers() must still produce a valid tide value.
+        with pytest.raises(TideDataError, match="not a tide"):
+            Environment().load_data([path])
 
-        The sine wave fallback must remain intact so the model degrades gracefully
-        when the tidal NetCDF is not available.
-        """
-        env = Environment()
-        env.update_buffers("2023-06-15 06:00:00")
-        tide = env.buffers.get("tide")
+    def test_synthetic_tide_is_opt_in_and_matches_old_sine_crossings(self):
+        """The opt-in sine crosses +/-0.30 m exactly where the old one crossed 0.70/0.30."""
+        env = Environment(synthetic_tide=True)
+        tide = tide_series_via_buffers(env, HOURS_30D)
+        hours = HOURS_30D.to_numpy().astype("datetime64[ns]").astype(np.int64) / (1e9 * 3600)
+        old = 0.5 * (1 + np.sin(2 * np.pi * hours / 12.4))
 
-        assert tide is not None
-        assert 0.0 <= tide <= 1.0, "fallback sine tide must be in [0, 1]"
-
-    def test_tidal_value_in_zero_one_range(self, tmp_path):
-        """Normalised tide must always be in [0, 1] for any timestamp in the dataset."""
-        ds = make_fake_tidal_dataset()
-        nc_path = str(tmp_path / "tidal.nc")
-        ds.to_netcdf(nc_path)
-
-        env = Environment()
-        env.load_data([nc_path])
-
-        for ts in ["2023-01-01", "2023-01-02", "2023-01-03"]:
-            env.update_buffers(ts)
-            tide = env.buffers["tide"]
-            assert 0.0 <= tide <= 1.0, f"tide={tide} out of range for {ts}"
+        assert env.tide_source == "synthetic_sine"
+        assert np.abs(tide).max() == pytest.approx(SYNTHETIC_TIDE_AMPLITUDE_M, abs=0.01)
+        np.testing.assert_array_equal(tide > 0.30, old > 0.70)
+        np.testing.assert_array_equal(tide < -0.30, old < 0.30)
+        assert_semidiurnal(tide)
