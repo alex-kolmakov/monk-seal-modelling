@@ -38,9 +38,9 @@
 
 ## ✨ Features
 
-- 🌊 **Data-Driven Environment**: Real oceanographic data from [Copernicus Marine Service](https://marine.copernicus.eu/) (currents, temperature, waves, chlorophyll)
+- 🌊 **Data-Driven Environment**: Real oceanographic data from [Copernicus Marine Service](https://marine.copernicus.eu/) (currents, temperature, waves, chlorophyll, hourly sea surface height)
 - 🧬 **Physiological Agents**: Energy balance, stomach load, digestion, and starvation dynamics
-- 🌙 **Tide-Driven Behavior**: Realistic activity patterns based on Madeira population research
+- 🌙 **Tide-Driven Behavior**: Haul-out and cave access follow the real hourly tide (Copernicus IBI sea surface height, in metres), as observed for the Madeira population
 - 🎬 **Animation Export**: Generate MP4 videos of seal movements and environmental conditions
 - ⚡ **Fast Simulation**: Multiprocessing support for large population runs
 
@@ -143,7 +143,7 @@ uv run python -m src.visualization.weather_visualizer \
   --physics  data/real_long/physics_20240101_20251231.nc \
   --waves    data/real_long/waves_20240101_20251231.nc \
   --bgc      data/real_long/bgc_20240101_20251231.nc \
-  --tidal    data/real_long/tidal_20240101_20251231.nc
+  --tidal    data/real_long/tidal_20240101_20251231.nc   # legacy DUACS `adt` file; not yet ported to zos
 ```
 
 > **File naming**: all data files use a `YYYYMMDD_YYYYMMDD` tag derived from your chosen date range. The notebook handles this automatically.
@@ -258,7 +258,7 @@ This model is an independent open-science effort and I actively seek feedback fr
 
 The current parameters are drawn from published literature but many are uncertain or Madeira-specific. Would love expert review on:
 
-- **Tide thresholds** — `low_tide_threshold` (0.30) and `high_tide_threshold` (0.70) controlling cave access and haul-out timing
+- **Tide thresholds** — `low_tide_m` (−0.30 m) and `high_tide_m` (+0.30 m) above mean sea level control cave access and haul-out timing. These are placeholders: at what tide height do the Desertas cave beaches flood or become accessible?
 - **Energy budgets** — `rmr = 750 kJ/h` (~0.85× Kleiber for a 300kg subtropical phocid); does this match your field observations?
 - **Foraging rates** — `shallow_foraging_rate = 3.0 kg/h` at depths < 50 m; are these realistic for Madeira's prey community?
 

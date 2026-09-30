@@ -46,8 +46,8 @@ These values are directly supported by monk seal field studies:
 | Storm Threshold | 2.5m SWH | Seals seek shelter above this. Storm effects on monk seal behavior confirmed in [Gazo et al. 2000](https://www.researchgate.net/publication/227717823); specific SWH value is a model parameter requiring field calibration. [Karamanlidis et al. 2004](https://www.cambridge.org/core/journals/oryx/article/availability-of-resting-and-pupping-habitat-for-the-critically-endangered-mediterranean-monk-seal-monachus-monachus-in-the-archipelago-of-madeira/26FDF046B0B81D1A3DC707E722174931) documents cave flooding from swells. |
 | Max Landing Swell | 4.0m SWH | Physical danger of landing on rocky substrates. Model parameter requiring field calibration. [Karamanlidis et al. 2004](https://www.cambridge.org/core/journals/oryx/article/availability-of-resting-and-pupping-habitat-for-the-critically-endangered-mediterranean-monk-seal-monachus-monachus-in-the-archipelago-of-madeira/26FDF046B0B81D1A3DC707E722174931) |
 | Tidal Period | 12.4 hours | Atlantic semidiurnal tides. Sighting rates 1.5× higher at high tide. [Pires et al. 2007](https://www.researchgate.net/publication/254846183) |
-| High Tide Threshold | 0.70 | Caves flood, forcing seals into water. [Pires et al. 2007](https://www.researchgate.net/publication/254846183) |
-| Low Tide Threshold | 0.30 | Cave beaches accessible for haul-out. [Pires et al. 2007](https://www.researchgate.net/publication/254846183) |
+| High Tide Threshold | +0.30 m | Caves flood, forcing seals into water. Placeholder above mean sea level (IBI `zos`); needs a cave-beach height reference. |
+| Low Tide Threshold | −0.30 m | Cave beaches accessible for haul-out. Placeholder below mean sea level (IBI `zos`); needs a cave-beach height reference. |
 
 > **Note**: Madeira seals are tide-driven, not circadian. Day/night detection exists in code but tidal forcing takes priority. [Pires et al. 2007](https://www.researchgate.net/publication/254846183)
 

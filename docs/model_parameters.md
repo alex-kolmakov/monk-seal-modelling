@@ -106,13 +106,16 @@ effective_rate = base_foraging_rate × max(hsi_floor, hsi)
 
 | Parameter | Default | Unit | Description |
 |-----------|---------|------|-------------|
-| `high_tide_threshold` | 0.70 | ratio | Tide level that floods caves (forces seals into water) |
-| `low_tide_threshold` | 0.30 | ratio | Tide level that exposes cave beaches (allows haul-out) |
+| `high_tide_m` | +0.30 | m above mean sea level | Tide height that floods caves (forces seals into water) |
+| `low_tide_m` | −0.30 | m above mean sea level | Tide height that exposes cave beaches (allows haul-out) |
+
+Placeholders: no cave-beach height reference yet. At the Desertas (IBI `zos`, Jan–May 2026)
+about a third of hours fall above `high_tide_m` and a third below `low_tide_m`.
 
 **Tuning tips:**
-- Wider gap (e.g., 0.20-0.80) = more time available for both hauling out and foraging
-- Narrower gap (e.g., 0.35-0.65) = tighter activity windows
-- For Mediterranean simulations (negligible tides), set both to 0.5
+- Wider gap (e.g., −0.50 to +0.50) = more time available for both hauling out and foraging
+- Narrower gap (e.g., −0.15 to +0.15) = tighter activity windows
+- For Mediterranean simulations (negligible tides), set both to `float("inf")`
 
 ### Storm Thresholds
 
@@ -170,8 +173,8 @@ For Mediterranean populations where tides don't drive behavior:
 
 ```python
 MEDITERRANEAN_CONFIG = SealConfig(
-    high_tide_threshold=0.5,      # Effectively disables tidal forcing
-    low_tide_threshold=0.5,       # Seals can haul out anytime
+    high_tide_m=float("inf"),     # Caves never flood
+    low_tide_m=float("inf"),      # Seals can haul out anytime
     # Day/night behavior would need separate implementation
 )
 ```
