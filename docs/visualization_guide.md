@@ -19,18 +19,26 @@ The `SealBehaviorAnimator` creates animated visualizations of seal tracking data
 
 - **Map Layer**: Bathymetry (sea depth) with land/coastline features
 - **Seal Track**: Historical movement path with color-coded behavioral states
-- **Metrics Panel**: Real-time display of energy, stomach load, depth, and tide
+- **Metrics Panel**: Real-time display of energy, stomach load and depth
 - **State Legend**: Color-coded behavioral states (FORAGING, RESTING, SLEEPING, etc.)
 
 ### Usage
 
 ```bash
-# Run seal animation from command line
-uv run python -m src.visualization.seal_animator \
-  --seal-csv data/real_long/simulation_results.csv \
-  --physics-file data/real_long/cmems_mod_ibi_phy_my_*.nc \
+# Whole colony from a simulation CSV
+uv run python -m src.visualization.seal_animator colony \
+  --colony-csv   data/real_long/long_sim_results.csv \
+  --physics-file data/real_long/physics_20260101_20260530.nc \
+  --output data/animations/colony.mp4 \
+  --fps 15 --step-hours 6
+
+# One seal's track: --seal-csv must hold a single agent's rows (no filtering is done),
+# e.g. df[df.agent_id == 0].to_csv("data/real_long/seal_0.csv", index=False)
+uv run python -m src.visualization.seal_animator single \
+  --seal-csv     data/real_long/seal_0.csv \
+  --physics-file data/real_long/physics_20260101_20260530.nc \
   --output data/animations/seal_behavior.mp4 \
-  --fps 10
+  --fps 10 --track-hours 24 --step-hours 6
 ```
 
 ### Configuration
@@ -41,11 +49,12 @@ Customize via `SealAnimationConfig`:
 from src.visualization.config import SealAnimationConfig
 
 config = SealAnimationConfig(
-    output_dir=Path("data/animations"),
+    output_dir=Path("data/animations"),  # default: data/real_long
     fps=10,                    # Frames per second
-    dpi=150,                   # Resolution
-    track_length=48,           # Hours of track history to show
-    figsize=(14, 8),           # Figure size in inches
+    dpi=100,                   # Resolution
+    track_hours=24,            # Hours of track history to show
+    step_hours=6,              # Render every Nth hour
+    figsize=(16, 10),          # Figure size in inches
 )
 ```
 
@@ -54,38 +63,40 @@ config = SealAnimationConfig(
 | State | Color | Description |
 |-------|-------|-------------|
 | FORAGING | Blue | Actively hunting/eating |
-| RESTING | Green | Digesting at sea (bottling) |
-| SLEEPING | Purple | Resting on land |
+| RESTING | Purple | Digesting at sea (bottling) |
+| SLEEPING | Red | Resting on land |
 | HAULING_OUT | Orange | Transitioning to land |
-| TRANSITING | Yellow | Long-distance travel |
-| DEAD | Red | Agent deceased |
+| TRANSITING | Teal | Long-distance travel |
+
+RECOVERY and DEAD have no colour in `SealAnimationConfig.state_colors`.
 
 ---
 
 ## Weather/Environment Animation
 
-The `WeatherVisualizer` creates 5-panel animations showing environmental conditions:
+The `WeatherVisualizer` creates 6-panel animations showing environmental conditions:
 
 ### Panels
 
-1. **Sea Temperature** (`thetao`) - Heat map of surface water temperature
-2. **Currents** (`uo`, `vo`) - Vector arrows showing current direction and strength
-3. **Wave Height** (`VHM0`) - Significant wave height (storm detection)
+1. **Surface Temperature** (`thetao`)
+2. **Significant Wave Height** (`VHM0`)
+3. **Ocean Current Speed** (`uo`, `vo`)
 4. **Chlorophyll** (`chl`) - Proxy for food availability (productivity)
-5. **Tide Level** - Current tidal state indicator
+5. **Sea Level Anomaly** (DUACS `adt`) - legacy input; not the model's tide, which is IBI `zos`
+6. **Bathymetry**
 
 ### Usage
 
 ```bash
 # Run weather animation from command line
 uv run python -m src.visualization.weather_visualizer \
-  --physics data/real_long/cmems_mod_ibi_phy_my_*.nc \
-  --waves data/real_long/cmems_mod_ibi_wav_my_*.nc \
-  --bgc data/real_long/cmems_mod_ibi_bgc_my_*.nc \
-  --tidal data/real_long/tidal_2023_2024.nc \
-  --output data/animations/weather.mp4 \
-  --start-date 2023-06-01 \
-  --end-date 2023-06-30
+  --physics data/real_long/physics_20260101_20260530.nc \
+  --waves   data/real_long/waves_20260101_20260530.nc \
+  --bgc     data/real_long/bgc_20260101_20260530.nc \
+  --tidal   <legacy DUACS file with `adt`> \
+  --start-date 2026-03-01 \
+  --end-date   2026-03-31
+# Writes <output_dir>/weather_animation.mp4 (default output_dir: data/real_long); there is no --output flag
 ```
 
 ### Configuration
@@ -140,9 +151,9 @@ ffmpeg -version
 ```
 
 ### Animation runs slowly
-- Reduce `dpi` in config (e.g., 100 instead of 150)
-- Reduce time range with `--start-date` and `--end-date`
-- Increase `step` parameter to skip frames
+- Reduce `dpi` (e.g., 80 instead of 100)
+- Weather: reduce the time range with `--start-date` / `--end-date`, or raise `skip_days` in `WeatherVisualizationConfig`
+- Seals: raise `--step-hours` to skip frames
 
 ### Memory errors with large datasets
 - Filter data to smaller geographic region
