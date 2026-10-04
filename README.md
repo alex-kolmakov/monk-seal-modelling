@@ -137,7 +137,7 @@ uv run python -m src.visualization.seal_animator colony \
   --colony-csv   data/real_long/long_sim_results.csv \
   --physics-file data/real_long/physics_20260101_20260530.nc
 
-# Single-seal animation: `seal_animator single --seal-csv <csv> --physics-file <nc>`
+# Single-seal animation: `seal_animator single --seal-csv <one-agent csv> --physics-file <nc>`
 
 # Environmental animation
 uv run python -m src.visualization.weather_visualizer \
