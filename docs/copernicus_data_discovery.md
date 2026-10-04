@@ -48,16 +48,14 @@ The tide is not in `var_map`: it is read separately from `zos` (`TIDE_VARIABLE`)
 
 ### Download Commands
 
-**For a chosen date range, use the notebook** (`notebooks/explore.py`, `DOWNLOAD_DATA = True`): it downloads only the missing files, named with the `{tag}` below.
-
 ```bash
-# CLI: downloads a fixed 2022-01-01 → 2023-12-31 example (temperature, currents, tide, waves, BGC)
-uv run python -m src.data_ingestion.download_data --config madeira [--verbose]
+# Download temperature, currents, tide, waves and BGC for a date range (DD-MM-YYYY)
+uv run python -m src.data_ingestion.download_data --from 01-01-2026 --to 30-05-2026 [--verbose]
 ```
 
-> The CLI writes `*_2022_2023.nc`, not `*_{tag}.nc`, so its files are not picked up by `run_real_long` without renaming.
+The notebook (`notebooks/explore.py`, `DOWNLOAD_DATA = True`) uses the same `madeira_config()`, and downloads only missing files.
 
-### Output Structure (notebook, `tag` = `YYYYMMDD_YYYYMMDD`)
+### Output Structure (`tag` = `YYYYMMDD_YYYYMMDD`)
 
 ```
 data/real_long/
