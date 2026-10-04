@@ -1,11 +1,7 @@
 """Unit tests for the SealAgent Finite State Machine.
 
-TDD red phase — the following tests CURRENTLY FAIL (they expose real bugs):
-    - TestDeathAndZombie::test_dead_agent_update_is_noop
-    - TestBugMagicThresholds::test_sleep_wakes_at_config_high_tide_threshold
-    - TestBugHauloutMemoryContamination::test_forage_does_not_contaminate_haulout_memory
-
-All other tests are GREEN and document the intended, working behaviour.
+Several tests began as regression tests for real bugs (dead-agent no-op, config
+tide threshold in sleep(), haul-out memory contamination); all now pass.
 
 Run:
     uv run pytest tests/unit/test_seal_fsm.py -v
@@ -257,7 +253,7 @@ class TestDeathAndZombie:
         seal.update_with_buffers(make_sea_buffers())
 
         assert seal.state == SealState.DEAD, "dead agent must not change state"
-        assert seal.energy == initial_energy, "dead agent must not burn energy"   # FAILS
+        assert seal.energy == initial_energy, "dead agent must not burn energy"
         assert seal.pos == initial_pos, "dead agent must not move"
 
 
@@ -279,21 +275,21 @@ class TestRecoveryState:
         seal = make_seal(state=SealState.FORAGING, energy_pct=0.12, stomach_load=5.0)
         env_data = {"tide": 0.0, "swh": 0.5, "is_land": False, "depth": 30.0}
         seal.decide_activity(env_data, is_night=False, is_land=False)
-        assert seal.state == SealState.RECOVERY   # FAILS: no RECOVERY entry implemented
+        assert seal.state == SealState.RECOVERY
 
     def test_recovery_continues_while_critical_and_digesting(self):
         """Seal stays in RECOVERY while energy < 50% and stomach still has food."""
         seal = make_seal(state=SealState.RECOVERY, energy_pct=0.30, stomach_load=3.0)
         env_data = {"tide": 0.0, "swh": 0.5, "is_land": False, "depth": 30.0}
         seal.decide_activity(env_data, is_night=False, is_land=False)
-        assert seal.state == SealState.RECOVERY   # FAILS: no RECOVERY branch in decide_activity
+        assert seal.state == SealState.RECOVERY
 
     def test_recovery_exits_to_foraging_when_healthy(self):
         """RECOVERY seal with energy > 50% transitions back to FORAGING."""
         seal = make_seal(state=SealState.RECOVERY, energy_pct=0.60, stomach_load=2.0)
         env_data = {"tide": 0.0, "swh": 0.5, "is_land": False, "depth": 30.0}
         seal.decide_activity(env_data, is_night=False, is_land=False)
-        assert seal.state == SealState.FORAGING   # FAILS
+        assert seal.state == SealState.FORAGING
 
     def test_recovery_action_digests_faster_than_resting(self):
         """recovery() must digest food faster than rest() — 2× digestion rate.
@@ -310,7 +306,7 @@ class TestRecoveryState:
         # Recovery
         seal_rec = make_seal(state=SealState.RECOVERY, stomach_load=5.0, energy_pct=0.5)
         energy_before_rec = seal_rec.energy
-        seal_rec.recovery({"tide": 0.0, "is_land": False}, {})   # FAILS: method missing
+        seal_rec.recovery({"tide": 0.0, "is_land": False}, {})
         recovery_energy_gain = seal_rec.energy - energy_before_rec
 
         assert recovery_energy_gain > rest_energy_gain, (
@@ -321,7 +317,7 @@ class TestRecoveryState:
         """recovery() action must not change the agent's position."""
         seal = make_seal(state=SealState.RECOVERY, stomach_load=3.0)
         initial_pos = seal.pos
-        seal.recovery({"tide": 0.0, "is_land": False}, {})   # FAILS: method missing
+        seal.recovery({"tide": 0.0, "is_land": False}, {})
         assert seal.pos == initial_pos
 
     def test_recovery_exits_when_stomach_empty_above_critical(self):

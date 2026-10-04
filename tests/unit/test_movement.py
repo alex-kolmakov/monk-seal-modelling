@@ -1,8 +1,6 @@
 """Unit tests for correlated_random_walk movement algorithm.
 
-TDD red phase — currently failing:
-    - test_longitude_corrected_for_latitude
-    - test_correlated_random_walk_no_dummy_param
+Includes regression tests for the latitude correction and the (pos, heading) signature.
 
 Run: uv run pytest tests/unit/test_movement.py -v
 """
@@ -48,7 +46,7 @@ class TestLatitudeCorrectedLongitude:
 
         # Corrected longitude: step / cos(lat) produces more eastward movement
         expected_lon = lon + step / math.cos(math.radians(lat))
-        assert new_lon == pytest.approx(expected_lon, rel=1e-6)   # FAILS without fix
+        assert new_lon == pytest.approx(expected_lon, rel=1e-6)
 
     def test_north_pole_latitude_unchanged(self):
         """Pure-north heading (π/2) must not alter longitude regardless of correction."""
@@ -95,6 +93,6 @@ class TestRemoveDummyDataInParam:
         """
         with patch("numpy.random.vonmises", return_value=0.0):
             # Call WITHOUT the dummy first argument
-            (pos, heading) = correlated_random_walk((32.5, -17.0), 0.0, speed=0.05)  # FAILS
+            (pos, heading) = correlated_random_walk((32.5, -17.0), 0.0, speed=0.05)
 
         assert pos[0] == pytest.approx(32.5, abs=1e-6)   # latitude unchanged (east heading)

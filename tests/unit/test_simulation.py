@@ -1,8 +1,6 @@
 """Unit tests for the Simulation class.
 
-TDD red phase — currently failing:
-    - TestSimulationInit::test_daily_stats_initialised_in_constructor
-    - TestHistoryStreaming::test_history_flushed_to_disk_after_24_steps
+Regression tests for daily_stats initialisation and history streaming (both fixed).
 
 Run: uv run pytest tests/unit/test_simulation.py -v
 """
@@ -92,7 +90,7 @@ class TestHistoryStreaming:
             })
 
         # Trigger a flush — the Simulation should flush when history reaches 24 entries
-        sim._flush_history_if_due()   # FAILS: method does not exist yet
+        sim._flush_history_if_due()
 
         # After flush: in-memory list must be empty
         assert sim.history == [], "history must be cleared after flush"
