@@ -47,13 +47,9 @@
 
 <table>
   <tr>
-    <td width="50%" align="center">
+    <td width="100%" align="center">
       <strong>🦭 Seal Behavior Animation</strong><br><br>
-      <video src="https://github.com/user-attachments/assets/d2925b1e-9933-4059-a24e-f4783edc98b2" controls width="100%"></video>
-    </td>
-    <td width="50%" align="center">
-      <strong>🌊 Weather & Environment</strong><br><br>
-      <video src="https://github.com/user-attachments/assets/079d6047-7075-4f08-b64f-e0cca51b33b5" controls width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/2d27736e-05b3-4c00-aebb-1918983f2fba" controls width="100%"></video>
     </td>
   </tr>
 </table>
