@@ -115,7 +115,9 @@ class SealAgent:
             )
 
         # 1. Sense Environment at current pos
-        env_data = query_env_buffers(self.pos[0], self.pos[1], env_buffers)
+        env_data = query_env_buffers(
+            self.pos[0], self.pos[1], env_buffers, self.config.hsi_chl_threshold
+        )
 
         # Track distance to nearest land (update every 6 hours to save computation)
         if self.age_in_hours % 6 == 0:
