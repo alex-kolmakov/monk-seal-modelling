@@ -10,12 +10,6 @@ This document focuses on the **scientific validation** of model parameters. For 
 
 The agent operates as a Finite State Machine (FSM). Transitions are driven by internal physiological variables (Energy, Stomach Load) and external environmental forcing (Tides, Storms, Food Availability).
 
-![Seal Agent State Machine](diagrams/seal_state_machine_diagram.png)
-
-> **Source file**: [diagrams/seal_state_machine.excalidraw](diagrams/seal_state_machine.excalidraw) — open at [excalidraw.com](https://excalidraw.com) to edit
-
-> ⚠️ **The diagram is outdated**: it lacks the RECOVERY and DEAD states, and its metabolic rates are wrong (current: RMR 750 kJ/h, AMR 1,125 kJ/h). The table below is authoritative.
-
 **State Summary:**
 
 | State | Location | Metabolic Rate | Energy Flow | Trigger to Exit |
