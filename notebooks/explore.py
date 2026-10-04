@@ -156,24 +156,10 @@ def _pipeline(
         ] if not f.exists()]
 
     def download(tag, dt_from, dt_to):
-        from src.data_ingestion.copernicus_manager import RegionBounds
-        from src.data_ingestion.download_data import (
-            DataDownloader, DatasetSpec, DownloadConfig, TimeRange,
-        )
+        from src.data_ingestion.download_data import DataDownloader, madeira_config
         if not (os.environ.get("COPERNICUS_USERNAME") and os.environ.get("COPERNICUS_PASSWORD")):
             raise RuntimeError("Missing COPERNICUS_USERNAME / COPERNICUS_PASSWORD in .env")
-        tr  = TimeRange(dt_from.strftime("%Y-%m-%d"), dt_to.strftime("%Y-%m-%d"))
-        rgn = RegionBounds(min_lon=-17.5, max_lon=-16.0, min_lat=32.2, max_lat=33.5)
-        DataDownloader().download_batch(DownloadConfig(
-            output_dir=DATA_DIR, region=rgn, time_range=tr,
-            datasets=[
-                DatasetSpec("cmems_mod_ibi_phy-temp_my_0.027deg_P1D-m",     ["thetao"],   f"physics_{tag}.nc"),
-                DatasetSpec("cmems_mod_ibi_phy-cur_my_0.027deg_P1D-m",      ["uo", "vo"], f"currents_{tag}.nc"),
-                DatasetSpec("cmems_mod_ibi_wav_my_0.027deg_PT1H-i",         ["VHM0"],     f"waves_{tag}.nc"),
-                DatasetSpec("cmems_mod_ibi_bgc-plankton_my_0.027deg_P1D-m", ["chl"],      f"bgc_{tag}.nc"),
-                DatasetSpec("cmems_mod_ibi_phy-ssh_my_0.027deg_PT1H-m",     ["zos"],      f"ssh_{tag}.nc"),
-            ],
-        ))
+        DataDownloader().download_batch(madeira_config(dt_from, dt_to, DATA_DIR))
 
     def run_sim(tag, duration_days, start_time):
         from src.simulation.agents.config import SealConfig

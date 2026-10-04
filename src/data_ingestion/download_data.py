@@ -8,6 +8,7 @@ import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 
 from src.data_ingestion.copernicus_manager import CopernicusManager, RegionBounds
@@ -237,47 +238,36 @@ class DataDownloader:
         return results
 
 
-# Configuration for Madeira region (updated dataset IDs — IBI split into sub-datasets 2024)
-MADEIRA_CONFIG_EXAMPLE = DownloadConfig(
-    output_dir=Path("data/real_long"),
-    region=RegionBounds(min_lon=-17.5, max_lon=-16.0, min_lat=32.2, max_lat=33.5),
-    time_range=TimeRange(start_date="2022-01-01", end_date="2023-12-31"),
-    datasets=[
-        # Temperature + depth levels (used for thetao and bathymetry computation)
-        DatasetSpec(
-            dataset_id="cmems_mod_ibi_phy-temp_my_0.027deg_P1D-m",
-            variables=["thetao"],
-            output_filename="physics_2022_2023.nc",
-        ),
-        # Currents (uo, vo)
-        DatasetSpec(
-            dataset_id="cmems_mod_ibi_phy-cur_my_0.027deg_P1D-m",
-            variables=["uo", "vo"],
-            output_filename="currents_2022_2023.nc",
-        ),
-        # Waves (significant wave height)
-        DatasetSpec(
-            dataset_id="cmems_mod_ibi_wav_my_0.027deg_PT1H-i",
-            variables=["VHM0"],
-            output_filename="waves_2022_2023.nc",
-        ),
-        # BGC — chlorophyll from plankton sub-dataset
-        DatasetSpec(
-            dataset_id="cmems_mod_ibi_bgc-plankton_my_0.027deg_P1D-m",
-            variables=["chl"],
-            output_filename="bgc_2022_2023.nc",
-        ),
-        # Tide — hourly sea surface height. zos is tidal (a separate *_detided product
-        # exists), unlike DUACS SLA, which is daily with the tide removed.
-        DatasetSpec(
-            dataset_id="cmems_mod_ibi_phy-ssh_my_0.027deg_PT1H-m",
-            variables=["zos"],
-            output_filename="ssh_2022_2023.nc",
-        ),
-    ],
-    overwrite=True,
-    max_workers=4,
-)
+MADEIRA_REGION = RegionBounds(min_lon=-17.5, max_lon=-16.0, min_lat=32.2, max_lat=33.5)
+
+
+def madeira_config(
+    dt_from: date, dt_to: date, output_dir: Path = Path("data/real_long")
+) -> DownloadConfig:
+    """IBI multi-year inputs for Madeira, named ``<kind>_{YYYYMMDD}_{YYYYMMDD}.nc``.
+
+    These are the names run_real_long and the notebook expect for the same dates.
+    """
+    tag = f"{dt_from:%Y%m%d}_{dt_to:%Y%m%d}"
+    return DownloadConfig(
+        output_dir=output_dir,
+        region=MADEIRA_REGION,
+        time_range=TimeRange(f"{dt_from:%Y-%m-%d}", f"{dt_to:%Y-%m-%d}"),
+        datasets=[
+            # Temperature + depth levels (used for thetao and bathymetry computation)
+            DatasetSpec(
+                "cmems_mod_ibi_phy-temp_my_0.027deg_P1D-m", ["thetao"], f"physics_{tag}.nc"
+            ),
+            DatasetSpec(
+                "cmems_mod_ibi_phy-cur_my_0.027deg_P1D-m", ["uo", "vo"], f"currents_{tag}.nc"
+            ),
+            DatasetSpec("cmems_mod_ibi_wav_my_0.027deg_PT1H-i", ["VHM0"], f"waves_{tag}.nc"),
+            DatasetSpec("cmems_mod_ibi_bgc-plankton_my_0.027deg_P1D-m", ["chl"], f"bgc_{tag}.nc"),
+            # Tide — hourly sea surface height. zos is tidal (a separate *_detided product
+            # exists), unlike DUACS SLA, which is daily with the tide removed.
+            DatasetSpec("cmems_mod_ibi_phy-ssh_my_0.027deg_PT1H-m", ["zos"], f"ssh_{tag}.nc"),
+        ],
+    )
 
 
 def main() -> None:
@@ -285,13 +275,8 @@ def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(description="Download Copernicus Marine data")
-    parser.add_argument(
-        "--config",
-        type=str,
-        default="madeira",
-        choices=["madeira"],
-        help="Predefined configuration to use",
-    )
+    parser.add_argument("--from", dest="date_from", required=True, help="Start date DD-MM-YYYY")
+    parser.add_argument("--to", dest="date_to", required=True, help="End date DD-MM-YYYY")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
 
     args = parser.parse_args()
@@ -301,11 +286,10 @@ def main() -> None:
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
-    # Select configuration
-    if args.config == "madeira":
-        config = MADEIRA_CONFIG_EXAMPLE
-    else:
-        raise ValueError(f"Unknown config: {args.config}")
+    config = madeira_config(
+        datetime.strptime(args.date_from, "%d-%m-%Y").date(),
+        datetime.strptime(args.date_to, "%d-%m-%Y").date(),
+    )
 
     # Download
     downloader = DataDownloader()
