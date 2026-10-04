@@ -63,6 +63,12 @@ class SealConfig:
     storm_threshold: float = 2.5  # SWH (m) - Seals seek shelter
     max_landing_swell: float = 4.0  # SWH (m) - Cannot safely haul out
 
+    # === MORTALITY ===
+    # Background risk for adult males (age >= 4), from human interaction / boldness.
+    # Model assumption. Upper bound: Pires et al. 2023 give adult male survival 0.90
+    # (10%/yr from all causes); starvation deaths are modelled separately, so this is lower.
+    male_annual_risk: float = 0.05
+
     # === DIGESTION ===
     digestion_rate: float = 1.0  # kg/h - Rate of stomach emptying during rest
     energy_per_kg_food: float = 3500.0  # kJ per kg of digested food

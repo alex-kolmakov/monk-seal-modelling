@@ -77,10 +77,13 @@ def trajectory(config: SealConfig) -> list[tuple]:
         # Asleep on the island, empty, at low-ish tide: the hunger-wake branch decides
         # hour 0. In free runs the tide usually evicts sleepers before they get hungry.
         (0.90, 0.0, (0.0, 0.0), SealState.SLEEPING),
+        # Adult male: exposed to male_annual_risk
+        (None, 0.0, (0.25, 0.25), SealState.FORAGING),
     ]
     agents = []
     for i, (frac, stomach, (dlat, dlon), state) in enumerate(starts):
-        a = SealAgent(str(i), start_pos=(LAT0 + dlat, LON0 + dlon), age=6, sex="F",
+        sex = "M" if i == len(starts) - 1 else "F"
+        a = SealAgent(str(i), start_pos=(LAT0 + dlat, LON0 + dlon), age=6, sex=sex,
                       config=config, seed=SEED)
         if frac is not None:
             a.energy = frac * config.max_energy
@@ -99,8 +102,16 @@ def trajectory(config: SealConfig) -> list[tuple]:
     return out
 
 
-def perturbations(value: float) -> list[float]:
+# Rare-event fields: ±30% almost never changes a 300 h run, so push them to the extreme.
+EXTREME_PERTURBATIONS = {
+    "male_annual_risk": [1.0],  # certain death in the first hour
+}
+
+
+def perturbations(name: str, value: float) -> list[float]:
     """Up and down: a threshold may only bind on one side (e.g. 0.95 × 1.3 > 100%)."""
+    if name in EXTREME_PERTURBATIONS:
+        return EXTREME_PERTURBATIONS[name]
     return [value * 1.3, value * 0.7] if value != 0 else [0.5]
 
 
@@ -133,6 +144,6 @@ def test_baseline_run_exercises_the_model():
 def test_every_config_field_changes_behaviour(name):
     changed = any(
         trajectory(replace(SealConfig(), **{name: value})) != baseline()
-        for value in perturbations(getattr(SealConfig(), name))
+        for value in perturbations(name, getattr(SealConfig(), name))
     )
     assert changed, f"SealConfig.{name} has no effect on behaviour"

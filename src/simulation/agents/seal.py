@@ -145,9 +145,9 @@ class SealAgent:
 
         # Male Risk Feature (Human Interaction / Boldness)
         if self.sex == "M" and self.age >= 4:
-            # Higher background mortality for adult males (approx 10% annual)
-            # 0.1 / 8760 ~= 1e-5
-            if self.rng.random() < 1.0e-5:
+            # Background mortality for adult males, annual rate spread over hourly steps
+            hourly_risk = 1.0 - (1.0 - self.config.male_annual_risk) ** (1 / 8760)
+            if self.rng.random() < hourly_risk:
                 self.state = SealState.DEAD
                 self.death_cause = "male_risk"
                 return
