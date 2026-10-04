@@ -82,9 +82,6 @@ class SealAgent:
 
         self.memory = SealMemory()
 
-        # Thresholds
-        self.storm_threshold = 2.5
-        self.max_landing_swell = 4.0
         self.age_in_hours = 0
         self.state_duration = 0  # Track how long we've been in current state
         self.patch_residence_time = 0  # Track time in current forage patch (Boredom)
@@ -130,13 +127,13 @@ class SealAgent:
         is_land = env_data.get("is_land", False)
 
         # Storm Logic
-        if swh > self.max_landing_swell:
+        if swh > self.config.max_landing_swell:
             if self.state == SealState.HAULING_OUT:
                 self.state = (
                     SealState.TRANSITING
                 )  # Move to safety instead of resting in impact zone
 
-        elif swh > self.storm_threshold:
+        elif swh > self.config.storm_threshold:
             if (
                 not is_land
                 and self.state != SealState.HAULING_OUT
@@ -154,7 +151,7 @@ class SealAgent:
                 return
 
         self.burn_energy()
-        if self.energy <= self.max_energy * 0.10:
+        if self.energy <= self.max_energy * self.config.starvation_threshold:
             self.log(f"DIED of Starvation (Critical Condition). Energy={self.energy:.1f}")
             self.state = SealState.DEAD
             self.death_cause = "starvation"
@@ -266,7 +263,7 @@ class SealAgent:
                     if self.energy < self.max_energy * self.config.critical_energy_threshold:
                         self.state = SealState.FORAGING
                     # Normal: not exhausted → wake and forage
-                    elif self.energy > self.max_energy * 0.20:
+                    elif self.energy > self.max_energy * self.config.tired_energy_fraction:
                         self.state = SealState.FORAGING
                 return
 
@@ -277,7 +274,8 @@ class SealAgent:
                  return
 
             # Wake up if hungry
-            if self.stomach_load == 0 and self.energy < self.max_energy * 0.95:
+            wake_level = self.max_energy * self.config.wake_energy_fraction
+            if self.stomach_load == 0 and self.energy < wake_level:
                  self.state = SealState.FORAGING
             return
 
@@ -297,7 +295,10 @@ class SealAgent:
         # 4. FORAGING
         if self.state == SealState.FORAGING:
             # Desperation Override: critically low energy, nothing to digest → keep eating
-            is_desperate = self.energy < self.max_energy * 0.15 and self.stomach_load < 0.1
+            is_desperate = (
+                self.energy < self.max_energy * self.config.critical_energy_threshold
+                and self.stomach_load < 0.1
+            )
             if is_desperate:
                 return # Keep eating
 
@@ -308,8 +309,8 @@ class SealAgent:
                 return
 
             # Tiredness / Satiety
-            is_tired = self.energy < self.max_energy * 0.2
-            is_full = self.stomach_load > self.stomach_capacity * 0.8
+            is_tired = self.energy < self.max_energy * self.config.tired_energy_fraction
+            is_full = self.stomach_load > self.stomach_capacity * self.config.full_stomach_fraction
 
             if is_full or is_tired:
                 # seek rest
@@ -322,14 +323,15 @@ class SealAgent:
 
             # Low Tide Opportunity: Maybe haul out if semi-full?
             # (Optional: Seals like to sleep at low tide even if not 100% full)
-            if tide < low_tide_threshold and self.stomach_load > self.stomach_capacity * 0.5:
+            semi_full = self.stomach_capacity * self.config.low_tide_haulout_stomach_fraction
+            if tide < low_tide_threshold and self.stomach_load > semi_full:
                  self.state = SealState.HAULING_OUT
                  return
 
         # 5. RECOVERY
         if self.state == SealState.RECOVERY:
             # Exit: recovered to 50% energy → return to normal activity
-            if self.energy > self.max_energy * 0.50:
+            if self.energy > self.max_energy * self.config.recovery_exit_fraction:
                 self.state = SealState.FORAGING
                 return
             # Stomach is empty and energy is above the critical floor: forage to refill.
@@ -1169,12 +1171,13 @@ class SealAgent:
             self.energy_discarded_kj += surplus
 
     def burn_energy(self):
-        # Active Metabolic Rate (AMR) = 1.5 * RMR for active states
+        # Active Metabolic Rate (AMR) = amr_multiplier × RMR for active states
         multiplier = 1.0
         if self.state in [SealState.FORAGING, SealState.TRANSITING, SealState.HAULING_OUT]:
-            multiplier = 1.5
+            multiplier = self.config.amr_multiplier
         elif self.state == SealState.RECOVERY:
-            multiplier = 0.5  # Near-torpid during critical recovery; maximise digestion window
+            # Near-torpid during critical recovery; maximise digestion window
+            multiplier = self.config.recovery_metabolic_multiplier
 
         cost = self.rmr * multiplier
         self.energy -= cost

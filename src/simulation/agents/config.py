@@ -28,6 +28,7 @@ class SealConfig:
 
     # AMR multiplier (Active Metabolic Rate = RMR × this factor)
     amr_multiplier: float = 1.5  # Applied during FORAGING, TRANSITING, HAULING_OUT
+    recovery_metabolic_multiplier: float = 0.5  # Near-torpid RECOVERY (model assumption)
 
     # === FORAGING RATES (base rates, modulated by HSI) ===
     # Depth-based intake rates (kg/h) - before HSI multiplier
@@ -44,6 +45,12 @@ class SealConfig:
     # === ENERGY THRESHOLDS ===
     starvation_threshold: float = 0.10  # 10% of max energy = death
     critical_energy_threshold: float = 0.15  # 15% = desperate foraging mode
+    # Behavioural switches (fractions of max energy / stomach capacity; model assumptions)
+    tired_energy_fraction: float = 0.20  # Below: too tired to forage, seek rest
+    wake_energy_fraction: float = 0.95  # Sleeping on land with empty stomach: wake below this
+    recovery_exit_fraction: float = 0.50  # RECOVERY ends above this energy
+    full_stomach_fraction: float = 0.8  # Above: stop foraging and rest
+    low_tide_haulout_stomach_fraction: float = 0.5  # Low tide + this full: haul out early
 
     # === TIDAL THRESHOLDS (metres above mean sea level, see environment.TIDE_DATUM_M) ===
     # PLACEHOLDERS: no cave-beach height reference yet [fact-check]. +/-0.30 m puts
