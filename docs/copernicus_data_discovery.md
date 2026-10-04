@@ -10,7 +10,7 @@ The simulation requires real-world oceanographic data to drive agent behavior. W
 
 **Study Area**: Madeira Archipelago  
 **Bounding Box**:
-- Latitude: 32.0°N to 33.5°N
+- Latitude: 32.2°N to 33.5°N
 - Longitude: -17.5°W to -16.0°W
 
 ## Required Datasets
@@ -29,32 +29,35 @@ The `Environment` class maps internal variable names to Copernicus variable name
 
 ```python
 self.var_map = {
-    'swh': ['VHM0', 'VAVH', 'swh'],           # Significant Wave Height
-    'chl': ['CHL', 'chl'],                     # Chlorophyll-a
-    'temp': ['thetao', 'temp', 'sst'],         # Sea Temperature
-    'uo': ['uo'],                              # Eastward Current
-    'vo': ['vo'],                              # Northward Current
+    "swh": ["VHM0", "VAVH", "swh", "significant_wave_height"],
+    "chl": ["CHL", "chl", "mass_concentration_of_chlorophyll_a_in_sea_water"],
+    "temp": ["thetao", "temp", "sst", "sea_surface_temperature"],
+    "uo": ["uo", "eastward_sea_water_velocity"],
+    "vo": ["vo", "northward_sea_water_velocity"],
 }
 ```
+
+The tide is not in `var_map`: it is read separately from `zos` (`TIDE_VARIABLE`), see below.
 
 ## Data Download
 
 ### Prerequisites
 
 1. **Copernicus Marine Account**: Register at [marine.copernicus.eu](https://marine.copernicus.eu/)
-2. **Configure Credentials**: Set `CMEMS_USERNAME` and `CMEMS_PASSWORD` environment variables, or configure `.netrc`
+2. **Configure Credentials**: Set `COPERNICUS_USERNAME` and `COPERNICUS_PASSWORD` environment variables (the notebook also reads them from `.env`)
 
 ### Download Commands
 
-```bash
-# Download all environmental data (temperature, currents, tide, waves, BGC)
-uv run python -m src.data_ingestion.download_data --config madeira
+**For a chosen date range, use the notebook** (`notebooks/explore.py`, `DOWNLOAD_DATA = True`): it downloads only the missing files, named with the `{tag}` below.
 
-# With verbose logging
-uv run python -m src.data_ingestion.download_data --config madeira --verbose
+```bash
+# CLI: downloads a fixed 2022-01-01 → 2023-12-31 example (temperature, currents, tide, waves, BGC)
+uv run python -m src.data_ingestion.download_data --config madeira [--verbose]
 ```
 
-### Output Structure
+> The CLI writes `*_2022_2023.nc`, not `*_{tag}.nc`, so its files are not picked up by `run_real_long` without renaming.
+
+### Output Structure (notebook, `tag` = `YYYYMMDD_YYYYMMDD`)
 
 ```
 data/real_long/
@@ -126,7 +129,7 @@ For performance, environmental data is pre-fetched into numpy arrays at each tim
 
 1. **Update Buffers**: Load 2D arrays for current timestamp
 2. **Fast Lookup**: Use index calculation instead of xarray selection
-3. **Time Looping**: Data wraps around if simulation exceeds dataset time range
+3. **Time Looping**: For swell, chlorophyll, temperature and currents, a time outside the dataset range wraps around. The tide never wraps: a time outside the `zos` range raises `TideDataError`.
 
 ```python
 # Fast index calculation for any lat/lon query
