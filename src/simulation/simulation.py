@@ -193,7 +193,9 @@ class Simulation:
             # Query env data again for history? Or agent carries it?
             # Agent doesn't carry env data.
             # We can re-query efficiently using buffers (main process).
-            env_data = query_env_buffers(agent.pos[0], agent.pos[1], buffers)
+            env_data = query_env_buffers(
+                agent.pos[0], agent.pos[1], buffers, agent.config.hsi_chl_threshold
+            )
 
             self.history.append(
                 {

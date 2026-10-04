@@ -3,12 +3,21 @@ from typing import Any
 
 import numpy as np
 
+from src.simulation.agents.config import SealConfig
+
 logging.basicConfig(level=logging.INFO)
 
 
-def query_env_buffers(lat: float, lon: float, buffers: dict) -> dict[str, Any]:
+def query_env_buffers(
+    lat: float,
+    lon: float,
+    buffers: dict,
+    hsi_chl_threshold: float = SealConfig.hsi_chl_threshold,
+) -> dict[str, Any]:
     """
     Stateless query of environment buffers.
+    hsi_chl_threshold: chlorophyll (mg/m³) at which HSI = 1; pass the agent's config.
+
     buffers format: {
         var_name: {
             'data': np.array,
@@ -129,6 +138,6 @@ def query_env_buffers(lat: float, lon: float, buffers: dict) -> dict[str, Any]:
     chl = result.get("chl")
     if chl is None:
         chl = 0.0
-    result["hsi"] = min(chl / 0.5, 1.0)
+    result["hsi"] = min(chl / hsi_chl_threshold, 1.0)
 
     return result

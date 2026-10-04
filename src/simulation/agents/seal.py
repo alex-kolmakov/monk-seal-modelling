@@ -1024,7 +1024,9 @@ class SealAgent:
         # 3. Calculate Intake
         # CRITICAL: Check if we're actually on land (even with inferred depth)
         # Seals cannot eat on land!
-        final_check = query_env_buffers(self.pos[0], self.pos[1], env_buffers)
+        final_check = query_env_buffers(
+            self.pos[0], self.pos[1], env_buffers, self.config.hsi_chl_threshold
+        )
         if final_check.get("is_land", False):
             # We're on land - cannot forage here
             self.log(f"Cannot forage on land (Depth={depth:.1f}m inferred, but is_land=True)")
@@ -1040,7 +1042,7 @@ class SealAgent:
             base_rate = self.config.deep_foraging_rate  # Desert (>100m) - cannot reach benthos
 
         # Productivity multiplier (HOW MUCH they catch - oligotrophic waters = less prey)
-        # HSI = min(chl / 0.5, 1.0) calculated in query_env_buffers
+        # HSI = min(chl / hsi_chl_threshold, 1.0) calculated in query_env_buffers
         # Madeira is oligotrophic: typical chl ~0.1-0.3 mg/m³ → HSI ~0.2-0.6
         hsi = final_check.get("hsi", 0.5)
         # Apply minimum floor from config to prevent starvation in oligotrophic waters
