@@ -18,24 +18,26 @@ The agent operates as a Finite State Machine (FSM). Transitions are driven by in
 
 | State | Location | Metabolic Rate | Energy Flow | Trigger to Exit |
 |:------|:---------|:---------------|:------------|:----------------|
-| FORAGING | Sea (0-50m) | AMR (750 kJ/h) | Stomach ↑ | Full, no food, or tide/storm |
-| RESTING | Sea | RMR (750 kJ/h) | Energy ↑ | Hungry, or land opportunity |
-| TRANSITING | Sea | AMR (750 kJ/h) | — | Reaches food patch |
-| HAULING_OUT | Sea→Land | AMR (750 kJ/h) | — | Reaches land or aborts |
-| SLEEPING | Land | RMR (750 kJ/h) | Energy ↑ | High tide or hungry |
+| FORAGING | Sea (0-50m) | AMR (1,125 kJ/h = 750 × 1.5) | Stomach ↑ | Full, tired, low tide, or critical with food → RECOVERY |
+| RESTING | Sea | RMR (750 kJ/h) | Energy ↑ (digests 1 kg/h) | Stomach empty, or low tide |
+| TRANSITING | Sea | AMR (1,125 kJ/h) | — | Reaches water / food patch |
+| HAULING_OUT | Sea→Land | AMR (1,125 kJ/h) | — | Reaches land or aborts |
+| SLEEPING | Land | RMR (750 kJ/h) | Energy ↑ (digests 1 kg/h) | High tide, or empty stomach and hungry |
+| RECOVERY | Sea | 0.5 × RMR (375 kJ/h) | Energy ↑ (digests 2 kg/h) | Energy > 50%, or empty stomach above critical |
+| DEAD | — | — | — | Starvation (energy ≤ 10% of max) or adult-male background risk |
 
 ## Scientific Validation of Parameters
 
-All parameters are validated against peer-reviewed research on Mediterranean monk seals. For tuning guidance and sensitivity analysis, see [Model Parameters & Tuning Guide](model_parameters.md).
+Parameters are drawn from peer-reviewed research where it exists; several are model assumptions that still need field calibration (marked as such below). For tuning guidance and sensitivity analysis, see [Model Parameters & Tuning Guide](model_parameters.md).
 
-### Validated Parameters
+### Parameters and Sources
 
-These values are directly supported by monk seal field studies:
+Each row gives its source, or says it is a model assumption:
 
 | Parameter | Value | Source & Notes |
 |:----------|:------|:---------------|
 | Body Mass | 300 kg | Adult females average 300kg, males 315-320kg. Range: 240-400kg. [Animal Diversity Web](https://animaldiversity.org/accounts/Monachus_monachus/), [Eastern Adriatic Monk Seal Project](https://adriaticmonkseal.org/biology/) |
-| Daily Food Intake | 3 kg | ~1% of body mass for maintenance. Model parameter — consistent with general pinniped physiology. |
+| Maintenance Intake | ~5.1 kg/day | Derived, not a parameter: RMR 750 kJ/h × 24 h = 18,000 kJ/day ÷ 3,500 kJ/kg. More when active (AMR). |
 | Shallow Foraging (0-50m) | 3.0 kg/h | 95% of dives occur at 0-50m. Base rate modulated by HSI. [Hale et al. 2011](https://www.aquaticmammalsjournal.org/wp-content/uploads/2011/08/37_3_Hale.pdf) |
 | Foraging Depth Distribution | 95% at 0-50m | Spot feeding observed <6m. Only 5% exceed 50m. [Hale et al. 2011](https://www.aquaticmammalsjournal.org/wp-content/uploads/2011/08/37_3_Hale.pdf), [Kiraç et al. 2002](https://www.researchgate.net/publication/301657846) |
 | Maximum Dive Depth | 200m | Capable of 200m dives but regularly forage shallower. [Eastern Adriatic Monk Seal Project](https://adriaticmonkseal.org/biology/) |
@@ -67,7 +69,7 @@ These values lack direct monk seal measurements but are consistent with observed
 
 Parameters derived from allometric equations or requiring sensitivity analysis are documented in [Model Parameters & Tuning Guide](model_parameters.md):
 
-- **RMR** (500 kJ/h) — Derived from Kleiber equation with hypometabolism correction
+- **RMR** (750 kJ/h) — Derived from the Kleiber equation (~0.85× Kleiber; see below)
 - **Starvation Threshold** (10%) — Based on general pinniped physiology
 - **Critical Energy Level** (15%) — Triggers desperate foraging behavior
 - **Energy-per-kg conversion** (3500 kJ/kg) — Model-specific unit mapping

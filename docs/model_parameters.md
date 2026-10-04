@@ -42,6 +42,7 @@ custom_config = SealConfig(
 |-----------|---------|------|-------------|
 | `rmr` | 750.0 | kJ/h | Resting Metabolic Rate (energy burn at rest) |
 | `amr_multiplier` | 1.5 | - | Active Metabolic Rate multiplier (AMR = RMR × this) |
+| `recovery_metabolic_multiplier` | 0.5 | - | Metabolic multiplier in RECOVERY (near-torpid; model assumption) |
 
 **Tuning tips:**
 - `rmr` is the most sensitive parameter for survival outcomes
@@ -96,6 +97,15 @@ effective_rate = base_foraging_rate × max(hsi_floor, hsi)
 |-----------|---------|------|-------------|
 | `starvation_threshold` | 0.10 | ratio | Energy level that causes death (10% of max) |
 | `critical_energy_threshold` | 0.15 | ratio | Energy level that triggers desperate foraging (15%) |
+| `tired_energy_fraction` | 0.20 | ratio | Below this, a foraging seal stops to rest; a bottling seal stays asleep |
+| `wake_energy_fraction` | 0.95 | ratio | A seal asleep on land with an empty stomach wakes below this |
+| `recovery_exit_fraction` | 0.50 | ratio | RECOVERY ends above this energy |
+| `full_stomach_fraction` | 0.8 | ratio of capacity | Above this, a foraging seal stops to rest |
+| `low_tide_haulout_stomach_fraction` | 0.5 | ratio of capacity | At low tide, a seal this full hauls out early |
+
+The five behavioural fractions are model assumptions, not field values. All of them
+are read from `SealConfig`; `tests/unit/test_config_fields.py` fails if any field stops
+affecting behaviour.
 
 **Tuning tips:**
 - Increasing thresholds makes seals more "cautious" (seek food earlier)
@@ -139,7 +149,7 @@ about a third of hours fall above `high_tide_m` and a third below `low_tide_m`.
 **Tuning tips:**
 - Higher `digestion_rate` = faster recovery, shorter rest periods needed
 - `energy_per_kg_food` affects the energy balance equation directly
-- Daily maintenance requires ~3kg food → 10,500 kJ vs ~18,000 kJ daily burn (at 750 kJ/h RMR)
+- Maintenance at rest needs ~5.1 kg food/day (18,000 kJ at 750 kJ/h RMR ÷ 3,500 kJ/kg); active states need more
 
 ## Pre-configured Environments
 
@@ -185,7 +195,7 @@ Key parameters to vary for sensitivity analysis:
 
 | Parameter | Suggested Range | Impact |
 |-----------|-----------------|--------|
-| `rmr` | 400-900 kJ/h | Survival rates, population dynamics |
+| `rmr` | 400-900 kJ/h (sweep range, not a literature range) | Survival rates, population dynamics |
 | `hsi_floor` | 0.2-0.7 | Starvation risk in oligotrophic waters |
 | `shallow_foraging_rate` | 2.0-5.0 kg/h | Energy acquisition, activity budgets |
 | `starvation_threshold` | 0.05-0.15 | Mortality timing |

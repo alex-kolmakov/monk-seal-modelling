@@ -39,8 +39,8 @@ def _config():
     SEED       = 42         # random seed
 
     # Seal physiology (see src/simulation/agents/config.py for all parameters)
-    RMR       = 750.0   # resting metabolic rate (kJ/h), literature range 300–800
-    HSI_FLOOR = 0.5     # habitat quality floor — 0.1 permissive, 0.9 strict
+    RMR       = 750.0   # resting metabolic rate (kJ/h); Kleiber ≈ 880 for 300 kg, see docs
+    HSI_FLOOR = 0.5     # minimum prey multiplier — higher = more food in poor water
     STORM_SWH = 2.5     # wave height (m) above which seals avoid landing
     LOW_TIDE  = -0.30   # tide (m above mean sea level) below which cave beaches are exposed
     HIGH_TIDE = 0.30    # tide (m above mean sea level) above which caves flood
