@@ -193,7 +193,7 @@ Key parameters to vary for sensitivity analysis:
 
 | Parameter | Suggested Range | Impact |
 |-----------|-----------------|--------|
-| `rmr` | 400-900 kJ/h (sweep range, not a literature range) | Survival rates, population dynamics |
+| `rmr` | 400-900 kJ/h (sweep range, not a literature range) | Survival rates, mortality timing |
 | `hsi_floor` | 0.2-0.7 | Starvation risk in oligotrophic waters |
 | `shallow_foraging_rate` | 2.0-5.0 kg/h | Energy acquisition, activity budgets |
 | `starvation_threshold` | 0.05-0.15 | Mortality timing |
