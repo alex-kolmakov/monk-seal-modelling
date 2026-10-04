@@ -138,6 +138,14 @@ about a third of hours fall above `high_tide_m` and a third below `low_tide_m`.
 - Higher thresholds = seals tolerate rougher conditions
 - The gap affects how long seals remain in "storm mode"
 
+### Mortality
+
+| Parameter | Default | Unit | Description |
+|-----------|---------|------|-------------|
+| `male_annual_risk` | 0.05 | per year | Background death risk for adult males (age ≥ 4), applied hourly |
+
+Model assumption. Pires et al. 2023 give adult male survival 0.90 (10%/yr from all causes) as an upper bound; starvation is modelled separately, so this value sits below it.
+
 ### Digestion
 
 | Parameter | Default | Unit | Description |
