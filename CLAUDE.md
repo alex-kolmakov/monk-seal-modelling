@@ -23,7 +23,7 @@ uv run ruff check src/ tests/ --fix          # auto-fix
 uv run pyrefly check
 
 # Download environmental data (requires COPERNICUS_USERNAME/COPERNICUS_PASSWORD env vars)
-uv run python -m src.data_ingestion.download_data --config madeira
+uv run python -m src.data_ingestion.download_data --config madeira  # fixed 2022-2023 example, writes *_2022_2023.nc; the notebook downloads by date range
 
 # Run simulation (dates DD-MM-YYYY; needs ssh_{tag}.nc unless --synthetic-tide)
 uv run python -m src.simulation.run_real_long --from 01-01-2026 --to 30-05-2026 --agents 30 --seed 42 --out results.csv
