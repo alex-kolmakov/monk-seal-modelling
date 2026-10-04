@@ -5,7 +5,7 @@
 <h1 align="center">🦭 Madeira Monk Seal ABM</h1>
 
 <p align="center">
-  <strong>An Agent-Based Model simulating the population dynamics of the Mediterranean Monk Seal (<em>Monachus monachus</em>) in the Madeira Archipelago</strong>
+  <strong>An Agent-Based Model of individual Mediterranean Monk Seal (<em>Monachus monachus</em>) behaviour and energetics in the Madeira Archipelago</strong>
 </p>
 
 <p align="center">
@@ -20,9 +20,6 @@
   </a>
   <a href="https://marine.copernicus.eu/">
     <img src="https://img.shields.io/badge/data-Copernicus%20Marine-00629B.svg" alt="Copernicus Marine">
-  </a>
-  <a href="LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
   </a>
 </p>
 
@@ -118,32 +115,36 @@ uv run python notebooks/explore.py
 ### Run — CLI
 
 ```bash
-# Simulate 30 seals from 1 Jan 2024 to 31 Dec 2025 (730 days)
-# Data files must already exist in data/real_long/
+# Simulate 30 seals from 1 Jan to 30 May 2026
+# Data files (incl. ssh_{tag}.nc for the tide) must already exist in data/real_long/
 uv run python -m src.simulation.run_real_long \
-  --from 01-01-2024 \
-  --to   31-12-2025 \
+  --from 01-01-2026 \
+  --to   30-05-2026 \
   --agents 30 \
   --seed 42
 
 # Output: data/real_long/long_sim_results.csv
 #         data/real_long/long_sim_results_stats.csv
+#         data/real_long/long_sim_results_meta.json   (run inputs, incl. tide source)
+# Use --out to change the file name; --synthetic-tide to run without ssh_{tag}.nc
 ```
 
 ### Visualize Results
 
 ```bash
 # Colony animation (requires a completed simulation CSV)
-uv run python -m src.visualization.seal_animator \
-  --seal-csv data/real_long/sim_20240101_20251231_30seals_s42.csv \
-  --physics-file data/real_long/physics_20240101_20251231.nc
+uv run python -m src.visualization.seal_animator colony \
+  --colony-csv   data/real_long/long_sim_results.csv \
+  --physics-file data/real_long/physics_20260101_20260530.nc
+
+# Single-seal animation: `seal_animator single --seal-csv <csv> --physics-file <nc>`
 
 # Environmental animation
 uv run python -m src.visualization.weather_visualizer \
-  --physics  data/real_long/physics_20240101_20251231.nc \
-  --waves    data/real_long/waves_20240101_20251231.nc \
-  --bgc      data/real_long/bgc_20240101_20251231.nc \
-  --tidal    data/real_long/tidal_20240101_20251231.nc   # legacy DUACS `adt` file; not yet ported to zos
+  --physics  data/real_long/physics_20260101_20260530.nc \
+  --waves    data/real_long/waves_20260101_20260530.nc \
+  --bgc      data/real_long/bgc_20260101_20260530.nc \
+  --tidal    <legacy DUACS file with `adt`>   # not yet ported to zos
 ```
 
 > **File naming**: all data files use a `YYYYMMDD_YYYYMMDD` tag derived from your chosen date range. The notebook handles this automatically.
@@ -158,11 +159,14 @@ monk-seal-modelling/
 │   ├── 📂 simulation/           # Core simulation engine
 │   │   ├── 📂 agents/           # Seal agent logic & movement
 │   │   │   ├── seal.py          # SealAgent class with FSM
+│   │   │   ├── config.py        # SealConfig (all tunable parameters)
 │   │   │   └── movement.py      # Correlated random walk
 │   │   ├── 📂 environment/      # Environmental data handling
-│   │   │   ├── environment.py   # Xarray data loading & buffering
+│   │   │   ├── environment.py   # Xarray data loading & buffering, tide from zos
 │   │   │   └── utils.py         # Fast spatial queries
-│   │   └── simulation.py        # Main simulation loop
+│   │   ├── simulation.py        # Main simulation loop
+│   │   ├── agent_worker.py      # Multiprocessing worker
+│   │   └── run_real_long.py     # CLI entry point
 │   │
 │   ├── 📂 data_ingestion/       # Copernicus data retrieval
 │   │   ├── copernicus_manager.py
@@ -170,18 +174,24 @@ monk-seal-modelling/
 │   │   └── discover_datasets.py
 │   │
 │   ├── 📂 visualization/        # Plotting & animation
-│   │   ├── seal_animator.py     # Seal behavior animations
-│   │   └── weather_visualizer.py # Environmental animations
+│   │   ├── seal_animator.py     # Seal behavior animations (single / colony)
+│   │   ├── weather_visualizer.py # Environmental animations
+│   │   ├── config.py            # Animation settings
+│   │   └── data_loader.py
+│
+├── 📂 notebooks/
+│   └── explore.py               # marimo notebook (recommended entry point)
 │
 ├── 📂 data/                     # Data directory (gitignored)
 │   └── 📂 real_long/            # Downloaded NetCDF files
 │
 ├── 📂 docs/                     # Documentation
 │   ├── seal_agent_documentation.md
+│   ├── model_parameters.md
 │   ├── copernicus_data_discovery.md
 │   └── visualization_guide.md
 │
-├── 📂 tests/                    # Test suite
+├── 📂 tests/unit/               # Test suite
 ├── 📄 pyproject.toml            # Project configuration
 └── 📄 README.md
 ```
@@ -208,7 +218,7 @@ monk-seal-modelling/
 uv run pytest
 
 # Run specific test file
-uv run pytest tests/test_seal.py -v
+uv run pytest tests/unit/test_seal_fsm.py -v
 
 # Run with verbose output
 uv run pytest -v --tb=short
@@ -243,7 +253,8 @@ This model is based on research on the Mediterranean Monk Seal (*Monachus monach
 
 - **Tidal Activity**: [Pires et al. 2007](https://www.researchgate.net/publication/254846183) - Activity patterns of the Mediterranean monk seal in the Archipelago of Madeira
 - **Foraging Depths**: [Hale et al. 2011](https://www.aquaticmammalsjournal.org/wp-content/uploads/2011/08/37_3_Hale.pdf) - Mediterranean monk seal fishery interactions in the Archipelago of Madeira
-- **Storm Effects on Population**: [Gazo et al. 2000](https://www.researchgate.net/publication/227717823) - Pup survival in the Mediterranean monk seal colony at Cabo Blanco Peninsula; documents storm-driven mortality and shelter use
+- **Pup Survival in Caves**: [Gazo et al. 2000](https://www.researchgate.net/publication/227717823) - Pup survival in the Mediterranean monk seal colony at Cabo Blanco Peninsula *(storm-driven mortality detail unverified)*
+- **Population & Vital Rates**: [Pires et al. 2023](https://doi.org/10.3354/esr01260) - First demographic parameter estimates for the Madeira population (27 seals in 2021; adult survival 0.98 females, 0.90 males; pupping Oct–Dec)
 - **Habitat**: [Karamanlidis et al. 2004](https://www.cambridge.org/core/journals/oryx/article/availability-of-resting-and-pupping-habitat-for-the-critically-endangered-mediterranean-monk-seal-monachus-monachus-in-the-archipelago-of-madeira/26FDF046B0B81D1A3DC707E722174931) - Availability of resting and pupping habitat for the Mediterranean monk seal in the Archipelago of Madeira
 
 See [Seal Agent Documentation](docs/seal_agent_documentation.md) for complete parameter validation.
@@ -269,7 +280,7 @@ Do the simulated activity budgets (time spent foraging / resting / hauling out p
 ### Model Extensions
 
 - **Greece / Cabo Blanco populations** — the model uses a `SealConfig` dataclass that makes porting to new populations straightforward. Happy to collaborate on calibrating parameters for other subpopulations.
-- **Pup and juvenile dynamics** — current model focuses on adult females; extending to age-structured populations is a planned future direction.
+- **Pup and juvenile dynamics** — agents have an age and sex, but there are no births and no age-specific behaviour yet; adding them is a planned future direction.
 - **Human disturbance** — the male risk feature is a stub; incorporating tourism pressure or fishing interaction data would strengthen demographic projections.
 
 If any of these resonate with your work, feel free to [open an issue](https://github.com/alex-kolmakov/monk-seal-modelling/issues) or reach out directly.
@@ -294,8 +305,7 @@ Contributions are welcome! Please:
 ## 🙏 Acknowledgments
 
 - **Copernicus Marine Service** for oceanographic data
-- **Lobo Marinho Madeira** for monk seal conservation research
-- **University of Madeira** for population studies
+- **IFCN Madeira** (Instituto das Florestas e Conservação da Natureza) and its monk seal programme, whose published field work this model draws on
 
 ---
 
