@@ -14,7 +14,7 @@ config = MADEIRA_CONFIG
 
 # Or create a custom configuration
 custom_config = SealConfig(
-    rmr=600.0,           # Higher metabolic rate
+    rmr=600.0,           # Lower metabolic rate
     hsi_floor=0.3,       # Lower productivity floor
     storm_threshold=3.0  # Higher storm tolerance
 )
@@ -46,17 +46,16 @@ custom_config = SealConfig(
 
 **Tuning tips:**
 - `rmr` is the most sensitive parameter for survival outcomes
-- Lower RMR (500-650) = conservative/hypometabolism scenarios
-- Higher RMR (750-900) = standard phocid baseline (Madeira default)
+- Lower RMR (500-650) = hypometabolism scenarios
+- Higher RMR (750-900) = closer to the reported phocid range; 750 is the Madeira default
 - `amr_multiplier` affects energy cost of foraging, transiting, and hauling out
 
 **Derivation:**
 ```
 Kleiber equation: RMR = 293 × M^0.75
 For 300kg seal: 293 × 72.08 ≈ 880 kJ/h (terrestrial baseline)
-Marine mammals: typically 1.5-2× higher (~1320-1760 kJ/h)
-Phocid seals at rest: ~1.0–1.3× Kleiber (Lavigne et al. 1986)
-Madeira model: uses 750 kJ/h (~0.85× Kleiber, subtropical phocid baseline)
+Phocid seals at rest: ~1.0–1.3× Kleiber (Lavigne et al. 1986) (unverified)
+Madeira model: uses 750 kJ/h (~0.85× Kleiber), below that range — a model assumption
 ```
 
 ### Foraging Rates
@@ -166,11 +165,10 @@ MADEIRA_CONFIG = SealConfig(
 
 ### Custom: Productive Environment (e.g., Cabo Blanco)
 
-For nutrient-rich waters with higher prey availability:
+For nutrient-rich waters with higher prey availability. Illustrative values, not calibrated:
 
 ```python
 CABO_BLANCO_CONFIG = SealConfig(
-    rmr=700.0,                    # Higher metabolic rate (no hypometabolism needed)
     hsi_floor=0.3,                # Lower floor (more food available)
     shallow_foraging_rate=4.0,    # Higher base foraging rate
     hsi_chl_threshold=1.0,        # Higher chlorophyll baseline
@@ -214,9 +212,12 @@ my_config = SealConfig(rmr=600.0, hsi_floor=0.4)
 
 # Initialize agent with custom config
 agent = SealAgent(
-    agent_id=1,
-    initial_position=(32.5, -16.5),
-    config=my_config
+    agent_id="1",
+    start_pos=(32.5, -16.5),
+    age=8,
+    sex="F",
+    config=my_config,
+    seed=42,
 )
 ```
 
@@ -224,22 +225,21 @@ agent = SealAgent(
 
 ```python
 # Parameter sweep example
-rmr_values = [400, 500, 600, 700, 800]
-results = []
+from src.simulation.run_real_long import run_long_simulation
 
-for rmr in rmr_values:
-    config = SealConfig(rmr=rmr)
-    # Run simulation with this config
-    result = run_simulation(config=config, duration_days=60)
-    results.append({"rmr": rmr, "survival_rate": result.survival_rate})
+for rmr in [400, 500, 600, 700, 800]:
+    run_long_simulation(
+        start_time="2026-01-01 00:00",
+        duration_days=60,
+        data_tag="20260101_20260530",
+        output_file=f"sweep_rmr{rmr}.csv",
+        seed=42,
+        num_agents=30,
+        config=SealConfig(rmr=rmr),
+    )
+# Deaths per run: n_deaths_total in data/real_long/sweep_rmr{rmr}_stats.csv
 ```
 
 ## Parameter Validation Status
 
-Parameters are categorized by validation status:
-
-- **VALIDATED**: Directly supported by monk seal research literature
-- **REASONABLE**: Biologically plausible based on observed behavior
-- **MODEL PARAMETER**: Derived from equations or model-specific (requires sensitivity analysis)
-
-See [Seal Agent Documentation](seal_agent_documentation.md) for scientific validation and literature sources for each parameter.
+Each parameter either cites a source or is marked as a model assumption; claims that could not be checked against the source are marked *unverified*. See [Seal Agent Documentation](seal_agent_documentation.md) for sources.
