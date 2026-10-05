@@ -218,6 +218,16 @@ class TestStormForcing:
         seal.update_with_buffers(make_sea_buffers(swh=5.0, tide=-0.5))
         assert seal.state != SealState.HAULING_OUT
 
+    def test_storm_switch_to_haul_out_restarts_the_state_timer(self):
+        """Storm swell (2.5-4 m) turns a long-resting seal into HAULING_OUT. The switch must
+        reset state_duration, or the 5 h haul-out timeout fires at once and the seal goes
+        straight to SLEEPING wherever it is (found replaying a real 2026 run)."""
+        seal = make_seal(state=SealState.RESTING, energy_pct=0.9, stomach_load=5.0)
+        seal.state_duration = 10
+        seal.update_with_buffers(make_sea_buffers(swh=3.0, tide=0.0))
+        assert seal.state == SealState.HAULING_OUT
+        assert seal.state_duration == 0
+
     def test_wash_off_toggle_off_leaves_sleeper_ashore_in_storm(self):
         cfg = SealConfig(storm_wash_off=False)
         seal = make_seal(state=SealState.SLEEPING, energy_pct=0.9, stomach_load=5.0, config=cfg)

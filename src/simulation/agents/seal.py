@@ -137,6 +137,9 @@ class SealAgent:
             swh = 0.0  # off the swell grid; counted per run as out_of_bounds
         is_land = env_data.get("is_land", False)
 
+        # Before any state change this step (storm included), so state_duration resets
+        old_state = self.state
+
         # Storm Logic
         if swh > self.config.max_landing_swell:
             if self.state == SealState.HAULING_OUT and self.config.storm_blocks_landing:
@@ -171,8 +174,6 @@ class SealAgent:
             self.state = SealState.DEAD
             self.death_cause = "starvation"
             return
-
-        old_state = self.state
 
         self.decide_activity(env_data, is_land)
         # A haul-out decided this step (e.g. RESTING at low tide) must also respect the
