@@ -103,6 +103,9 @@ class Environment:
 
         self.allow_time_wrap = allow_time_wrap
         self._warned_missing: set[str] = set()
+        # Per-variable numpy views built once in load_data (see _build_fields)
+        self._fields: dict[str, dict] = {}
+        self._depth_buffer: dict | None = None
 
     @property
     def tide_source(self) -> str:
@@ -162,12 +165,61 @@ class Environment:
                         f"not a tide. Load IBI hourly '{TIDE_VARIABLE}' instead."
                     )
 
-                self.datasets.append(ds)
+                # Agents only ever read the surface level: keep it, in memory, once,
+                # instead of re-reading every depth level from disk each hourly step.
+                if "depth" in ds.dims:
+                    ds = ds.isel(depth=0)
+                self.datasets.append(ds.load())
                 logger.info(f"Loaded {fp}")
             except EnvironmentDataError:
                 raise
             except Exception as e:
                 raise EnvironmentDataError(f"Failed to load {fp}: {e}") from e
+
+        self._build_fields()
+
+    def _build_fields(self):
+        """Extract each buffered variable once as numpy (time first) with its time index,
+        so update_buffers is an index lookup per hour instead of an xarray selection."""
+        self._fields = {}
+        for int_key in set(self.defaults) - {"is_land"}:
+            for ds in self.datasets:
+                name = next((n for n in self.var_map.get(int_key, []) if n in ds), None)
+                if name is None:
+                    continue
+                da = ds[name]
+                has_time = "time" in da.dims
+                data = da.values
+                if has_time:
+                    data = np.moveaxis(data, da.get_axis_num("time"), 0)
+                self._fields[int_key] = {
+                    "name": name,
+                    "data": data,
+                    "times": pd.DatetimeIndex(da.time.values) if has_time else None,
+                    # native time step, for the coverage check in _time_index
+                    "step": pd.Timedelta(int(np.median(np.diff(da.time.values.astype("int64")))))
+                    if has_time and da.time.size > 1
+                    else None,
+                    "lats": da.lat.values,
+                    "lons": da.lon.values,
+                }
+                break
+
+        self._depth_buffer = None
+        if self.bathymetry_map is not None:
+            bm = self.bathymetry_map
+            self._depth_buffer = {
+                "data": bm.values,
+                "lat_min": bm.lat.min().item(),
+                "lat_step": (bm.lat.max() - bm.lat.min()).item() / (bm.lat.size - 1)
+                if bm.lat.size > 1
+                else 1.0,
+                "lon_min": bm.lon.min().item(),
+                "lon_step": (bm.lon.max() - bm.lon.min()).item() / (bm.lon.size - 1)
+                if bm.lon.size > 1
+                else 1.0,
+                "shape": bm.shape,
+            }
 
     def _load_tide(self, ds: xr.Dataset, fp: str):
         """Reduce hourly zos to a colony-mean height series in metres above the datum."""
@@ -210,24 +262,23 @@ class Environment:
             "or construct Environment(synthetic_tide=True)"
         )
 
-    def _at_time(self, ds: xr.Dataset, name: str, time: pd.Timestamp | str) -> xr.Dataset:
-        """The dataset slice nearest `time`. Outside the data (more than one native step
-        past either end) it raises, or replays from the start with allow_time_wrap."""
-        times = ds.time.values
+    def _time_index(self, field: dict, time: pd.Timestamp | str) -> int:
+        """Index of the step nearest `time` (as xarray's sel(method="nearest")). Outside the
+        data (more than one native step past either end) it raises, or replays from the
+        start with allow_time_wrap."""
+        times: pd.DatetimeIndex = field["times"]
         if len(times) < 2:
-            return ds.isel(time=0)
-        step = np.median(np.diff(times))
-        t = np.datetime64(pd.Timestamp(time))
-        if times[0] - step <= t <= times[-1] + step:
-            return ds.sel(time=t, method="nearest")
-        if not self.allow_time_wrap:
-            raise EnvironmentDataError(
-                f"No '{name}' at {pd.Timestamp(time)}: data covers "
-                f"{pd.Timestamp(times[0])} -> {pd.Timestamp(times[-1])} "
-                "(pass allow_time_wrap / --allow-time-wrap to replay it)"
-            )
-        span = times[-1] - times[0]
-        return ds.sel(time=times[0] + (t - times[0]) % span, method="nearest")
+            return 0
+        step = field["step"]
+        t = pd.Timestamp(time)
+        if not times[0] - step <= t <= times[-1] + step:
+            if not self.allow_time_wrap:
+                raise EnvironmentDataError(
+                    f"No '{field['name']}' at {t}: data covers {times[0]} -> {times[-1]} "
+                    "(pass allow_time_wrap / --allow-time-wrap to replay it)"
+                )
+            t = times[0] + (t - times[0]) % (times[-1] - times[0])
+        return int(times.get_indexer(pd.DatetimeIndex([t]), method="nearest")[0])
 
     def update_buffers(self, time: pd.Timestamp | str):
         """Pre-fetch data for the current timestamp into numpy arrays."""
@@ -237,64 +288,32 @@ class Environment:
         self.current_time = time
         self.buffers = {}
 
-        # Iterate over internal variables we need (keys of defaults)
-        targets = set(self.defaults.keys()) - {"is_land"}
-
-        for int_key in targets:
-            possible_names = self.var_map.get(int_key, [])
-            found = False
-            for ds in self.datasets:
-                for name in possible_names:
-                    if name in ds:
-                        ds_t = self._at_time(ds, name, time) if "time" in ds.dims else ds
-
-                        # Depth
-                        if "depth" in ds_t.dims:
-                            ds_t = ds_t.isel(depth=0)
-
-                        # Extract Data
-                        data = ds_t[name].values
-                        lats = ds[name].lat.values
-                        lons = ds[name].lon.values
-
-                        # Replace NaNs with unique value if needed,
-                        # but we need NaNs for land mask
-                        # Store
-                        self.buffers[int_key] = {
-                            "data": data,
-                            "lats": lats,
-                            "lons": lons,
-                            # Pre-compute resolution for fast index mapping
-                            "lat_min": lats.min(),
-                            "lat_step": lats[1] - lats[0] if len(lats) > 1 else 1.0,
-                            "lon_min": lons.min(),
-                            "lon_step": lons[1] - lons[0] if len(lons) > 1 else 1.0,
-                            "shape": data.shape,
-                        }
-                        found = True
-                        break
-                if found:
-                    break
-            if not found and int_key not in self._warned_missing:
-                self._warned_missing.add(int_key)
-                logger.warning(f"No loaded dataset has '{int_key}'; agents read it as None")
-
-        # Add Static Bathymetry to Buffers
-        if self.bathymetry_map is not None:
-            self.buffers["depth"] = {
-                "data": self.bathymetry_map.values,
-                "lat_min": self.bathymetry_map.lat.min().item(),
-                "lat_step": (self.bathymetry_map.lat.max() - self.bathymetry_map.lat.min()).item()
-                / (self.bathymetry_map.lat.size - 1)
-                if self.bathymetry_map.lat.size > 1
-                else 1.0,
-                "lon_min": self.bathymetry_map.lon.min().item(),
-                "lon_step": (self.bathymetry_map.lon.max() - self.bathymetry_map.lon.min()).item()
-                / (self.bathymetry_map.lon.size - 1)
-                if self.bathymetry_map.lon.size > 1
-                else 1.0,
-                "shape": self.bathymetry_map.shape,
+        for int_key in sorted(set(self.defaults) - {"is_land"}):
+            field = self._fields.get(int_key)
+            if field is None:
+                if int_key not in self._warned_missing:
+                    self._warned_missing.add(int_key)
+                    logger.warning(f"No loaded dataset has '{int_key}'; agents read it as None")
+                continue
+            data = field["data"]
+            if field["times"] is not None:
+                data = data[self._time_index(field, time)]
+            lats, lons = field["lats"], field["lons"]
+            self.buffers[int_key] = {
+                "data": data,
+                "lats": lats,
+                "lons": lons,
+                # Pre-computed resolution for fast index mapping
+                "lat_min": lats.min(),
+                "lat_step": lats[1] - lats[0] if len(lats) > 1 else 1.0,
+                "lon_min": lons.min(),
+                "lon_step": lons[1] - lons[0] if len(lons) > 1 else 1.0,
+                "shape": data.shape,
             }
+
+        # Static bathymetry, built once in _build_fields
+        if self._depth_buffer is not None:
+            self.buffers["depth"] = self._depth_buffer
 
         # Tide: metres above TIDE_DATUM_M (scalar, colony-wide)
         self.buffers["tide"] = self._tide_at(self.current_time)
