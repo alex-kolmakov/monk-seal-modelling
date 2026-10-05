@@ -29,6 +29,15 @@ class SealMemory:
     last_known_storm_pos: tuple[float, float] | None = None
 
 
+def _nav(buffers: dict) -> dict:
+    """Only the bathymetry, for navigation probes that read is_land / is_coastline / depth.
+
+    Querying swell and chlorophyll at every probe point was ~80% of agent time.
+    """
+    depth = buffers.get("depth")
+    return {"depth": depth} if depth is not None else {}
+
+
 class SealAgent:
     def __init__(
         self,
@@ -384,7 +393,7 @@ class SealAgent:
             p_lat = start_pos[0] + d_lat * f
             p_lon = start_pos[1] + d_lon * f
 
-            data = query_env_buffers(p_lat, p_lon, env_buffers)
+            data = query_env_buffers(p_lat, p_lon, _nav(env_buffers))
             if data.get("is_land", False):
                 return True
         return False
@@ -443,7 +452,7 @@ class SealAgent:
                 sample_lon = self.pos[1] + radius_deg * sin(angle) / cos(radians(self.pos[0]))
 
                 # Check if this is land
-                data = query_env_buffers(sample_lat, sample_lon, env_buffers)
+                data = query_env_buffers(sample_lat, sample_lon, _nav(env_buffers))
                 # For distance calculation, include ALL land (even coastline)
                 # For navigation targets, we still prefer non-coastline land
                 if data.get("is_land", False):
@@ -466,7 +475,7 @@ class SealAgent:
     def _get_distance_to_nearest_land(self, env_buffers):
         """Get distance to nearest land for proximity tracking."""
         # First check if we're already on land
-        current_data = query_env_buffers(self.pos[0], self.pos[1], env_buffers)
+        current_data = query_env_buffers(self.pos[0], self.pos[1], _nav(env_buffers))
         if current_data.get("is_land", False):
             return 0.0  # We're on land, distance is zero
 
@@ -512,7 +521,7 @@ class SealAgent:
                 sample_lon = self.pos[1] + radius_deg * sin(angle) / cos(radians(self.pos[0]))
 
                 # Check if this is water (not land)
-                data = query_env_buffers(sample_lat, sample_lon, env_buffers)
+                data = query_env_buffers(sample_lat, sample_lon, _nav(env_buffers))
                 if not data.get("is_land", False):
                     # Found water! Calculate actual distance
                     distance = self._calculate_distance_km(self.pos, (sample_lat, sample_lon))
@@ -558,7 +567,7 @@ class SealAgent:
                     math.radians(self.pos[0])
                 )
 
-                data = query_env_buffers(sample_lat, sample_lon, env_buffers)
+                data = query_env_buffers(sample_lat, sample_lon, _nav(env_buffers))
                 if data.get("is_land", False):
                     continue
                 depth = data.get("depth")
@@ -625,7 +634,7 @@ class SealAgent:
 
         # Deep Water Panic - Find Nearest Shallow Water
         # If we're in dangerously deep water, search for nearest shallow water
-        curr_data_check = query_env_buffers(self.pos[0], self.pos[1], env_buffers)
+        curr_data_check = query_env_buffers(self.pos[0], self.pos[1], _nav(env_buffers))
         depth_check = curr_data_check.get("depth", 9999)
 
         # Extreme depth threshold - abyssal zone, seal is in danger
@@ -646,7 +655,7 @@ class SealAgent:
                         search_radius / search_steps
                     )
 
-                    test_data = query_env_buffers(test_lat, test_lon, env_buffers)
+                    test_data = query_env_buffers(test_lat, test_lon, _nav(env_buffers))
                     test_depth = test_data.get("depth", 9999)
                     test_is_land = test_data.get("is_land", False)
 
@@ -685,7 +694,7 @@ class SealAgent:
 
         # Sample candidates
         # COLLISION CHECK (Pre-computation)
-        curr_data = query_env_buffers(self.pos[0], self.pos[1], env_buffers)
+        curr_data = query_env_buffers(self.pos[0], self.pos[1], _nav(env_buffers))
         currently_on_land = curr_data.get("is_land", False)
 
         candidates: list[dict[str, Any]] = []
@@ -704,7 +713,7 @@ class SealAgent:
                     math.radians(self.pos[0])
                 )
 
-                check_data = query_env_buffers(new_lat, new_lon, env_buffers)
+                check_data = query_env_buffers(new_lat, new_lon, _nav(env_buffers))
                 candidates.append(
                     {"pos": (new_lat, new_lon), "heading": new_heading, "data": check_data}
                 )
@@ -714,7 +723,7 @@ class SealAgent:
                 new_pos, new_heading = correlated_random_walk(
                     self.pos, self.heading, speed=step_speed, rng=self.rng
                 )
-                check_data = query_env_buffers(new_pos[0], new_pos[1], env_buffers)
+                check_data = query_env_buffers(new_pos[0], new_pos[1], _nav(env_buffers))
                 candidates.append(
                     {"pos": new_pos, "heading": new_heading, "data": check_data}
                 )
@@ -782,7 +791,7 @@ class SealAgent:
                     esc_lon = self.pos[1] + step_speed * math.sin(esc_heading) / math.cos(
                         math.radians(self.pos[0])
                     )
-                    esc_data = query_env_buffers(esc_lat, esc_lon, env_buffers)
+                    esc_data = query_env_buffers(esc_lat, esc_lon, _nav(env_buffers))
                     if not esc_data.get("is_land", False):
                         valid_candidates.append(
                             {"pos": (esc_lat, esc_lon), "heading": esc_heading, "data": esc_data}
@@ -989,7 +998,7 @@ class SealAgent:
                 self.log(f"Forage Stay. Depth={depth:.1f}m (PatchTime={self.patch_residence_time})")
 
             # Re-read depth at final position
-            check = query_env_buffers(self.pos[0], self.pos[1], env_buffers)
+            check = query_env_buffers(self.pos[0], self.pos[1], _nav(env_buffers))
             depth = check.get("depth")
             if depth is None:
                 depth = 9999
@@ -1024,7 +1033,7 @@ class SealAgent:
                 else:
                     self._move_smart(env_buffers, intention="WATER", target_pos=None)
 
-            check = query_env_buffers(self.pos[0], self.pos[1], env_buffers)
+            check = query_env_buffers(self.pos[0], self.pos[1], _nav(env_buffers))
             depth = check.get("depth")
             if depth is None:
                 depth = 9999
@@ -1074,7 +1083,7 @@ class SealAgent:
 
     def transit(self, env_buffers):
         # Check if we are stuck on land (e.g. High Tide Evacuation)
-        curr_data = query_env_buffers(self.pos[0], self.pos[1], env_buffers)
+        curr_data = query_env_buffers(self.pos[0], self.pos[1], _nav(env_buffers))
         if curr_data.get("is_land", False):
             self.log("TRANSITING on land - searching for nearest water to escape")
             water_pos, water_dist = self._find_nearest_water(
