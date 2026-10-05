@@ -102,8 +102,6 @@ class SealAgent:
             return
 
         self.age_in_hours += 1
-        hour_of_day = self.age_in_hours % 24
-        is_night = hour_of_day >= 20 or hour_of_day < 6
 
         if self.age_in_hours % (24 * 365) == 0:
             self.age += 1
@@ -161,11 +159,11 @@ class SealAgent:
 
         old_state = self.state
 
-        self.decide_activity(env_data, is_night, is_land)
+        self.decide_activity(env_data, is_land)
         if self.state != old_state:
             self.state_duration = 0
             self.log(
-                f"State Change: State={self.state.name}. Night={is_night}, Land={is_land}, "
+                f"State Change: State={self.state.name}. Land={is_land}, "
                 f"Tide={env_data.get('tide', 0.0):.2f}"
             )
             # Reset patch residence time if state changes
@@ -200,7 +198,7 @@ class SealAgent:
         # Assuming environment has buffers exposed or we just crash/fix caller
         raise NotImplementedError("Use update_with_buffers() for multiprocessing support")
 
-    def decide_activity(self, env_data, is_night, is_land):
+    def decide_activity(self, env_data, is_land):
         if self.state == SealState.DEAD:
             return
 

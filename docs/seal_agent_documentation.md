@@ -45,7 +45,7 @@ Each row gives its source, or says it is a model assumption:
 | High Tide Threshold | +0.30 m | Caves flood, forcing seals into water. Placeholder above mean sea level (IBI `zos`); needs a cave-beach height reference. |
 | Low Tide Threshold | −0.30 m | Cave beaches accessible for haul-out. Placeholder below mean sea level (IBI `zos`); needs a cave-beach height reference. |
 
-> **Note**: The model treats Madeira seals as tide-driven, not circadian, following [Pires et al. 2007](https://www.researchgate.net/publication/254846183) *(unverified)*. Day/night is computed in code but not used in any decision.
+> **Note**: The model treats Madeira seals as tide-driven, not circadian, following [Pires et al. 2007](https://www.researchgate.net/publication/254846183) *(unverified)*. There is no day/night cycle in the model.
 
 ### Biologically Reasonable Parameters
 
