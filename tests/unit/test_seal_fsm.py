@@ -204,6 +204,18 @@ class TestStormForcing:
         seal.update_with_buffers(buffers)
         assert seal.state == SealState.HAULING_OUT
 
+    def test_storm_washes_sleeping_seal_off_land(self):
+        """SWH > max_landing_swell floods the cave beach: a sleeper ashore must leave,
+        even at low tide (before, land cells read swh = 0 and storms never reached it)."""
+        seal = make_seal(state=SealState.SLEEPING, energy_pct=0.9, stomach_load=5.0)
+        seal.update_with_buffers(make_land_buffers(swh=5.0, tide=-0.5))
+        assert seal.state == SealState.TRANSITING
+
+    def test_swell_below_landing_limit_leaves_sleeper_ashore(self):
+        seal = make_seal(state=SealState.SLEEPING, energy_pct=0.9, stomach_load=5.0)
+        seal.update_with_buffers(make_land_buffers(swh=3.0, tide=-0.5))
+        assert seal.state == SealState.SLEEPING
+
 
 # ─── DEATH AND ZOMBIE GUARD TESTS ────────────────────────────────────────────
 

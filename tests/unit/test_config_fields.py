@@ -77,6 +77,9 @@ def trajectory(config: SealConfig) -> list[tuple]:
         # Asleep on the island, empty, at low-ish tide: the hunger-wake branch decides
         # hour 0. In free runs the tide usually evicts sleepers before they get hungry.
         (0.90, 0.0, (0.0, 0.0), SealState.SLEEPING),
+        # Recovering at sea with food to digest: exercises the RECOVERY exit threshold
+        # (storms wash sleepers off land, so free runs rarely reach it in 300 h).
+        (0.40, 8.0, (-0.25, 0.25), SealState.RECOVERY),
         # Adult male: exposed to male_annual_risk
         (None, 0.0, (0.25, 0.25), SealState.FORAGING),
     ]

@@ -134,6 +134,10 @@ class SealAgent:
                 self.state = (
                     SealState.TRANSITING
                 )  # Move to safety instead of resting in impact zone
+            elif is_land:
+                # Storm swell floods the cave beaches (Pires et al. 2023): washed off land
+                self.log(f"STORM ({swh:.1f} m > {self.config.max_landing_swell}): off land")
+                self.state = SealState.TRANSITING
 
         elif swh > self.config.storm_threshold:
             if (
