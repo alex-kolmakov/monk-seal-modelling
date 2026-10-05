@@ -53,6 +53,8 @@ class Simulation:
         self.history: list[dict] = []
         self.daily_stats: list[dict] = []
         self.n_deaths_total = 0
+        # Agent-hours whose position fell outside an input grid (env values set to None)
+        self.n_out_of_bounds = 0
         self._n_deaths_since_stat = 0
 
         logger.info(
@@ -162,6 +164,11 @@ class Simulation:
                     )
 
         logger.info(f"Simulation Complete. Total Steps: {step_count}")
+        if self.n_out_of_bounds:
+            logger.warning(
+                f"{self.n_out_of_bounds} agent-hours were outside an input grid; "
+                "their environment values are None in the history"
+            )
 
     def step(self, executor):
         """Execute one time step using the provided executor."""
@@ -196,6 +203,7 @@ class Simulation:
             env_data = query_env_buffers(
                 agent.pos[0], agent.pos[1], buffers, agent.config.hsi_chl_threshold
             )
+            self.n_out_of_bounds += env_data["out_of_bounds"]
 
             self.history.append(
                 {

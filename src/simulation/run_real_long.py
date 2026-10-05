@@ -85,8 +85,7 @@ def run_long_simulation(
 
     print("Loading Environment...")
     sim.load_environment(nc_files)
-    _write_run_metadata(
-        output_csv,
+    meta = dict(
         start_time=start_time,
         duration_days=duration_days,
         seed=sim.seed,
@@ -97,6 +96,7 @@ def run_long_simulation(
         tide_datum_m=TIDE_DATUM_M,
         nc_files=nc_files,
     )
+    _write_run_metadata(output_csv, **meta)
 
     # Desertas Islands: ~32.5N, 16.5W
     sim.create_agents(num_agents=num_agents, start_lat=32.5, start_lon=-16.5, config=config)
@@ -106,6 +106,9 @@ def run_long_simulation(
     sim.run(max_workers=workers)
 
     sim.save_results()
+    _write_run_metadata(
+        output_csv, **meta, n_deaths=sim.n_deaths_total, n_out_of_bounds=sim.n_out_of_bounds
+    )
     print("Done.")
 
 

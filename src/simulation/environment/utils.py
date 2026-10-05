@@ -18,6 +18,9 @@ def query_env_buffers(
     Stateless query of environment buffers.
     hsi_chl_threshold: chlorophyll (mg/m³) at which HSI = 1; pass the agent's config.
 
+    A position outside a variable's grid gives that variable None and sets
+    result["out_of_bounds"]; callers count it instead of acting on a made-up default.
+
     buffers format: {
         var_name: {
             'data': np.array,
@@ -37,82 +40,86 @@ def query_env_buffers(
         "hsi": 0.0,
         "depth": None,
         "tide": 0.0,  # metres above mean sea level
+        "out_of_bounds": False,
     }
 
     original_depth_is_nan = False  # Track if original bathymetry was NaN
 
     for key, buf in buffers.items():
-        try:
-            # Fast Nearest Neighbor Index
-            r_idx = int(round((lat - buf["lat_min"]) / buf["lat_step"]))
-            c_idx = int(round((lon - buf["lon_min"]) / buf["lon_step"]))
+        if not isinstance(buf, dict):
+            continue  # scalars such as "tide", read below
+        # Fast Nearest Neighbor Index
+        r_idx = int(round((lat - buf["lat_min"]) / buf["lat_step"]))
+        c_idx = int(round((lon - buf["lon_min"]) / buf["lon_step"]))
 
-            rows, cols = buf["shape"]
+        rows, cols = buf["shape"]
 
-            # IMPROVED LAND DETECTION: Check neighborhood to distinguish coastline from open water
-            # Coastline cells have NaN but are surrounded by water
-            # True land (islands) have NaN and are surrounded by more NaN cells
-            if key == "depth":
-                # Check if ORIGINAL position (before clamping) is within bounds
-                if 0 <= r_idx < rows and 0 <= c_idx < cols:
-                    val_unclamped = buf["data"][r_idx, c_idx]
-                    original_depth_is_nan = np.isnan(val_unclamped)
+        # IMPROVED LAND DETECTION: Check neighborhood to distinguish coastline from open water
+        # Coastline cells have NaN but are surrounded by water
+        # True land (islands) have NaN and are surrounded by more NaN cells
+        if key == "depth":
+            # Check if ORIGINAL position (before clamping) is within bounds
+            if 0 <= r_idx < rows and 0 <= c_idx < cols:
+                val_unclamped = buf["data"][r_idx, c_idx]
+                original_depth_is_nan = np.isnan(val_unclamped)
 
-                    # If NaN, check surrounding cells to determine if it's coastline or true land
-                    if original_depth_is_nan:
-                        # Count NaN cells in 3x3 neighborhood
-                        nan_count = 0
-                        total_count = 0
-                        for dr in [-1, 0, 1]:
-                            for dc in [-1, 0, 1]:
+                # If NaN, check surrounding cells to determine if it's coastline or true land
+                if original_depth_is_nan:
+                    # Count NaN cells in 3x3 neighborhood
+                    nan_count = 0
+                    total_count = 0
+                    for dr in [-1, 0, 1]:
+                        for dc in [-1, 0, 1]:
+                            nr, nc = r_idx + dr, c_idx + dc
+                            if 0 <= nr < rows and 0 <= nc < cols:
+                                total_count += 1
+                                if np.isnan(buf["data"][nr, nc]):
+                                    nan_count += 1
+
+                    # If less than 50% of neighbors are NaN, it's coastline
+                    # Treat it as water for navigation purposes
+                    if total_count > 0 and nan_count / total_count < 0.5:
+                        original_depth_is_nan = False  # Coastline - treat as water
+            else:
+                # Position is out of bounds - not land, just off the map
+                original_depth_is_nan = False
+                result["out_of_bounds"] = True
+
+            # NOW clamp for depth inference (to avoid "void" panic)
+            r_idx = max(0, min(r_idx, rows - 1))
+            c_idx = max(0, min(c_idx, cols - 1))
+
+        # Standard bounds check for other variables
+        if 0 <= r_idx < rows and 0 <= c_idx < cols:
+            val = buf["data"][r_idx, c_idx]
+
+            # Handling NaNs
+            if np.isnan(val):
+                # User Request: Infer depth for Holes?
+                if key == "depth":
+                    # Search spiral/radius for valid depth FOR NAVIGATION
+                    # Agent doesn't carry env data. Use buffers.
+                    found_depth: float | None = None
+                    for radius in range(1, 4):  # Check 3 layers (approx 3-9km)
+                        if found_depth is not None:
+                            break
+                        for dr in range(-radius, radius + 1):
+                            for dc in range(-radius, radius + 1):
                                 nr, nc = r_idx + dr, c_idx + dc
                                 if 0 <= nr < rows and 0 <= nc < cols:
-                                    total_count += 1
-                                    if np.isnan(buf["data"][nr, nc]):
-                                        nan_count += 1
+                                    v = buf["data"][nr, nc]
+                                    if not np.isnan(v):
+                                        found_depth = float(v)
+                                        break
 
-                        # If less than 50% of neighbors are NaN, it's coastline
-                        # Treat it as water for navigation purposes
-                        if total_count > 0 and nan_count / total_count < 0.5:
-                            original_depth_is_nan = False  # Coastline - treat as water
-                else:
-                    # Position is out of bounds - not land, just off the map
-                    original_depth_is_nan = False
-
-                # NOW clamp for depth inference (to avoid "void" panic)
-                r_idx = max(0, min(r_idx, rows - 1))
-                c_idx = max(0, min(c_idx, cols - 1))
-
-            # Standard bounds check for other variables
-            if 0 <= r_idx < rows and 0 <= c_idx < cols:
-                val = buf["data"][r_idx, c_idx]
-
-                # Handling NaNs
-                if np.isnan(val):
-                    # User Request: Infer depth for Holes?
-                    if key == "depth":
-                        # Search spiral/radius for valid depth FOR NAVIGATION
-                        # Agent doesn't carry env data. Use buffers.
-                        found_depth: float | None = None
-                        for radius in range(1, 4):  # Check 3 layers (approx 3-9km)
-                            if found_depth is not None:
-                                break
-                            for dr in range(-radius, radius + 1):
-                                for dc in range(-radius, radius + 1):
-                                    nr, nc = r_idx + dr, c_idx + dc
-                                    if 0 <= nr < rows and 0 <= nc < cols:
-                                        v = buf["data"][nr, nc]
-                                        if not np.isnan(v):
-                                            found_depth = float(v)
-                                            break
-
-                        if found_depth is not None:
-                            result[key] = found_depth
-                        # Else leave as None (will be 9999 in defaults)
-                else:
-                    result[key] = float(val)
-        except Exception:
-            pass
+                    if found_depth is not None:
+                        result[key] = found_depth
+                    # Else leave as None (will be 9999 in defaults)
+            else:
+                result[key] = float(val)
+        else:
+            result[key] = None
+            result["out_of_bounds"] = True
 
     # Retrieve scalar tide if it exists
     result["tide"] = buffers.get("tide", 0.0)

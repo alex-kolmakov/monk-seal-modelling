@@ -123,7 +123,9 @@ class SealAgent:
             if self.distance_to_land > 15.0:
                 self.log(f"⚠️  FAR FROM LAND: {self.distance_to_land:.1f}km from nearest island")
 
-        swh = env_data.get("swh", 0.0)
+        swh = env_data.get("swh")
+        if swh is None:
+            swh = 0.0  # off the swell grid; counted per run as out_of_bounds
         is_land = env_data.get("is_land", False)
 
         # Storm Logic
