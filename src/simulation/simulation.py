@@ -58,6 +58,7 @@ class Simulation:
         self.n_deaths_total = 0
         # Agent-hours whose position fell outside an input grid (env values set to None)
         self.n_out_of_bounds = 0
+        self._workers = 1  # set by run(); step() chunks agents across this many workers
         self._n_deaths_since_stat = 0
 
         logger.info(
@@ -152,6 +153,7 @@ class Simulation:
         # Use ProcessPoolExecutor for parallel processing
         # Use simple os.cpu_count() default if None
         workers = max_workers if max_workers else os.cpu_count()
+        self._workers = workers or 1
         logger.info(f"Using {workers} workers for multiprocessing.")
 
         with ProcessPoolExecutor(max_workers=workers) as executor:
@@ -184,7 +186,11 @@ class Simulation:
         # use repeat(buffers) to pass same env data to all
 
         # Generator for faster submission? List conversion needed for results.
-        results = list(executor.map(update_agent_worker, self.agents, repeat(buffers)))
+        # One chunk of agents per worker: buffers are pickled once per chunk, not per agent
+        chunk = max(1, -(-len(self.agents) // self._workers))
+        results = list(
+            executor.map(update_agent_worker, self.agents, repeat(buffers), chunksize=chunk)
+        )
 
         # 3. Post-Process (Reconstruct agent list, filter dead, handle births)
         active_agents = []
