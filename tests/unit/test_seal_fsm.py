@@ -211,6 +211,19 @@ class TestStormForcing:
         seal.update_with_buffers(make_land_buffers(swh=5.0, tide=-0.5))
         assert seal.state == SealState.TRANSITING
 
+    def test_wash_off_toggle_off_leaves_sleeper_ashore_in_storm(self):
+        cfg = SealConfig(storm_wash_off=False)
+        seal = make_seal(state=SealState.SLEEPING, energy_pct=0.9, stomach_load=5.0, config=cfg)
+        seal.update_with_buffers(make_land_buffers(swh=5.0, tide=-0.5))
+        assert seal.state == SealState.SLEEPING
+
+    def test_landing_block_toggle_off_lets_haul_out_land_in_storm(self):
+        # Wash-off too, or the seal that just landed is washed straight back off
+        cfg = SealConfig(storm_blocks_landing=False, storm_wash_off=False)
+        seal = make_seal(state=SealState.HAULING_OUT, energy_pct=0.9, config=cfg)
+        seal.update_with_buffers(make_land_buffers(swh=5.0, tide=-0.15))
+        assert seal.state == SealState.SLEEPING
+
     def test_swell_below_landing_limit_leaves_sleeper_ashore(self):
         seal = make_seal(state=SealState.SLEEPING, energy_pct=0.9, stomach_load=5.0)
         seal.update_with_buffers(make_land_buffers(swh=3.0, tide=-0.5))

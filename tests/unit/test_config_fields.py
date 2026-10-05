@@ -115,6 +115,8 @@ def perturbations(name: str, value: float) -> list[float]:
     """Up and down: a threshold may only bind on one side (e.g. 0.95 × 1.3 > 100%)."""
     if name in EXTREME_PERTURBATIONS:
         return EXTREME_PERTURBATIONS[name]
+    if isinstance(value, bool):
+        return [not value]
     return [value * 1.3, value * 0.7] if value != 0 else [0.5]
 
 

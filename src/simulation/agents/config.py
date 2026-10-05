@@ -62,6 +62,10 @@ class SealConfig:
     # === STORM THRESHOLDS ===
     storm_threshold: float = 2.5  # SWH (m) - Seals seek shelter
     max_landing_swell: float = 4.0  # SWH (m) - Cannot safely haul out
+    # Behaviour above max_landing_swell (model assumptions; Pires et al. 2023 describe
+    # storm swell flooding the inner cave beaches)
+    storm_blocks_landing: bool = True  # No landing: a seal hauling out turns back to sea
+    storm_wash_off: bool = True  # Seals already ashore are washed back into the water
 
     # === MORTALITY ===
     # Background risk for adult males (age >= 4), from human interaction / boldness.

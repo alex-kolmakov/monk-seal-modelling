@@ -132,6 +132,10 @@ about a third of hours fall above `high_tide_m` and a third below `low_tide_m`.
 |-----------|---------|------|-------------|
 | `storm_threshold` | 2.5 | m SWH | Wave height that triggers shelter-seeking |
 | `max_landing_swell` | 4.0 | m SWH | Wave height that prevents hauling out |
+| `storm_blocks_landing` | True | toggle | Above `max_landing_swell`, a seal hauling out turns back to sea |
+| `storm_wash_off` | True | toggle | Above `max_landing_swell`, seals ashore are washed back into the water |
+
+Both toggles are model assumptions: Pires et al. 2023 describe storm swell flooding the inner cave beaches. Land cells read the swell of the nearest water cell.
 
 **Tuning tips:**
 - Lower thresholds = more cautious seals (seek shelter earlier)
