@@ -28,8 +28,29 @@ SYNTHETIC_TIDE_PERIOD_H = 12.4
 NOT_A_TIDE_VARIABLES = ("sla", "adt")
 
 
-class TideDataError(RuntimeError):
+class EnvironmentDataError(RuntimeError):
+    """An input file is unreadable, irregular, or does not cover the requested time."""
+
+
+class TideDataError(EnvironmentDataError):
     """The tide source is missing, invalid, or does not cover the requested time."""
+
+
+def _regular_grid(ds: xr.Dataset, fp: str) -> xr.Dataset:
+    """Ascending, evenly spaced lat/lon, as the index arithmetic in query_env_buffers assumes."""
+    for coord in ("lat", "lon"):
+        if coord not in ds.coords or ds[coord].size < 2:
+            continue
+        step = np.diff(ds[coord].values)
+        if (step < 0).all():
+            logger.info(f"{fp}: {coord} is descending; sorting ascending")
+            ds = ds.sortby(coord)
+            step = np.diff(ds[coord].values)
+        if not (step > 0).all():
+            raise EnvironmentDataError(f"{fp}: {coord} is not monotonic")
+        if not np.allclose(step, step[0], rtol=1e-3):
+            raise EnvironmentDataError(f"{fp}: {coord} spacing is not uniform")
+    return ds
 
 
 class Environment:
@@ -40,9 +61,11 @@ class Environment:
     Args:
         synthetic_tide: Allow the synthetic sine tide when no zos file is loaded.
             Without it, update_buffers() raises instead of silently faking the tide.
+        allow_time_wrap: Replay a dataset from its start when the run goes past its end.
+            Without it, a time outside a dataset raises EnvironmentDataError.
     """
 
-    def __init__(self, synthetic_tide: bool = False):
+    def __init__(self, synthetic_tide: bool = False, allow_time_wrap: bool = False):
         self.datasets: list[xr.Dataset] = []
 
         # Fallback defaults
@@ -78,6 +101,9 @@ class Environment:
         self.tide_series: pd.Series | None = None
         self.tide_file: str | None = None
 
+        self.allow_time_wrap = allow_time_wrap
+        self._warned_missing: set[str] = set()
+
     @property
     def tide_source(self) -> str:
         """Where buffers['tide'] comes from, for run metadata."""
@@ -104,6 +130,7 @@ class Environment:
                         rename_dict[coord] = "lon"
                 if rename_dict:
                     ds = ds.rename(rename_dict)
+                ds = _regular_grid(ds, fp)
 
                 # Check for Depth/Thetao to compute Bathymetry
                 if "depth" in ds.dims and ("thetao" in ds.data_vars or "thetao" in ds.keys()):
@@ -123,7 +150,7 @@ class Environment:
                         )
                         logger.info("Bathymetry map computed successfully.")
                     except Exception as e:
-                        logger.warning(f"Failed to compute bathymetry: {e}")
+                        raise EnvironmentDataError(f"{fp}: cannot compute bathymetry: {e}") from e
 
                 if TIDE_VARIABLE in ds.data_vars:
                     self._load_tide(ds, fp)
@@ -137,10 +164,10 @@ class Environment:
 
                 self.datasets.append(ds)
                 logger.info(f"Loaded {fp}")
-            except TideDataError:
+            except EnvironmentDataError:
                 raise
             except Exception as e:
-                logger.error(f"Failed to load {fp}: {e}")
+                raise EnvironmentDataError(f"Failed to load {fp}: {e}") from e
 
     def _load_tide(self, ds: xr.Dataset, fp: str):
         """Reduce hourly zos to a colony-mean height series in metres above the datum."""
@@ -183,6 +210,25 @@ class Environment:
             "or construct Environment(synthetic_tide=True)"
         )
 
+    def _at_time(self, ds: xr.Dataset, name: str, time: pd.Timestamp | str) -> xr.Dataset:
+        """The dataset slice nearest `time`. Outside the data (more than one native step
+        past either end) it raises, or replays from the start with allow_time_wrap."""
+        times = ds.time.values
+        if len(times) < 2:
+            return ds.isel(time=0)
+        step = np.median(np.diff(times))
+        t = np.datetime64(pd.Timestamp(time))
+        if times[0] - step <= t <= times[-1] + step:
+            return ds.sel(time=t, method="nearest")
+        if not self.allow_time_wrap:
+            raise EnvironmentDataError(
+                f"No '{name}' at {pd.Timestamp(time)}: data covers "
+                f"{pd.Timestamp(times[0])} -> {pd.Timestamp(times[-1])} "
+                "(pass allow_time_wrap / --allow-time-wrap to replay it)"
+            )
+        span = times[-1] - times[0]
+        return ds.sel(time=times[0] + (t - times[0]) % span, method="nearest")
+
     def update_buffers(self, time: pd.Timestamp | str):
         """Pre-fetch data for the current timestamp into numpy arrays."""
         if self.current_time == time:
@@ -200,59 +246,38 @@ class Environment:
             for ds in self.datasets:
                 for name in possible_names:
                     if name in ds:
-                        try:
-                            # Select time (Looping Logic)
-                            # If requested time is outside dataset capacity, modulo it
-                            if "time" in ds.dims:
-                                t_min = ds.time.min().values
-                                t_max = ds.time.max().values
-                                dt_range = t_max - t_min
-                                if hasattr(dt_range, "astype"):  # numpy timedelta
-                                    range_ns = dt_range.astype("timedelta64[ns]").astype(int)
-                                    if range_ns > 0:
-                                        # Offset requested time to be relative to t_min, then modulo
-                                        t_req = pd.Timestamp(time).value
-                                        t_start = pd.Timestamp(t_min).value
-                                        offset = (t_req - t_start) % range_ns
-                                        mapped_time = pd.Timestamp(t_start + offset)
-                                        ds_t = ds.sel(time=mapped_time, method="nearest")
-                                    else:
-                                        ds_t = ds.isel(time=0)
-                                else:
-                                    ds_t = ds
-                            else:
-                                ds_t = ds
+                        ds_t = self._at_time(ds, name, time) if "time" in ds.dims else ds
 
-                            # Depth
-                            if "depth" in ds_t.dims:
-                                ds_t = ds_t.isel(depth=0)
+                        # Depth
+                        if "depth" in ds_t.dims:
+                            ds_t = ds_t.isel(depth=0)
 
-                            # Extract Data
-                            data = ds_t[name].values
-                            lats = ds[name].lat.values
-                            lons = ds[name].lon.values
+                        # Extract Data
+                        data = ds_t[name].values
+                        lats = ds[name].lat.values
+                        lons = ds[name].lon.values
 
-                            # Replace NaNs with unique value if needed,
-                            # but we need NaNs for land mask
-                            # Store
-                            self.buffers[int_key] = {
-                                "data": data,
-                                "lats": lats,
-                                "lons": lons,
-                                # Pre-compute resolution for fast index mapping
-                                "lat_min": lats.min(),
-                                "lat_step": lats[1] - lats[0] if len(lats) > 1 else 1.0,
-                                "lon_min": lons.min(),
-                                "lon_step": lons[1] - lons[0] if len(lons) > 1 else 1.0,
-                                "shape": data.shape,
-                            }
-                            found = True
-                            break
-                        except Exception:
-                            # logger.warning(f"Error buffering {name}: {e}")
-                            pass
+                        # Replace NaNs with unique value if needed,
+                        # but we need NaNs for land mask
+                        # Store
+                        self.buffers[int_key] = {
+                            "data": data,
+                            "lats": lats,
+                            "lons": lons,
+                            # Pre-compute resolution for fast index mapping
+                            "lat_min": lats.min(),
+                            "lat_step": lats[1] - lats[0] if len(lats) > 1 else 1.0,
+                            "lon_min": lons.min(),
+                            "lon_step": lons[1] - lons[0] if len(lons) > 1 else 1.0,
+                            "shape": data.shape,
+                        }
+                        found = True
+                        break
                 if found:
                     break
+            if not found and int_key not in self._warned_missing:
+                self._warned_missing.add(int_key)
+                logger.warning(f"No loaded dataset has '{int_key}'; agents read it as None")
 
         # Add Static Bathymetry to Buffers
         if self.bathymetry_map is not None:

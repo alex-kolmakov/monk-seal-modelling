@@ -20,6 +20,7 @@ from src.simulation.environment.environment import (
     SYNTHETIC_TIDE_AMPLITUDE_M,
     TIDE_DATUM_M,
     Environment,
+    EnvironmentDataError,
     TideDataError,
 )
 
@@ -156,3 +157,65 @@ class TestNoSilentFallback:
         np.testing.assert_array_equal(tide > 0.30, old > 0.70)
         np.testing.assert_array_equal(tide < -0.30, old < 0.30)
         assert_semidiurnal(tide)
+
+
+# ─── INPUT CHECKS (no silent wrap, regular grids, fail on bad files) ──────────
+
+DAYS_10 = pd.date_range("2026-03-01", periods=10, freq="D")
+
+
+def write_swh(tmp_path, lats, lons=(-16.6, -16.5, -16.4), times=DAYS_10, name="waves.nc") -> str:
+    data = np.arange(len(times) * len(lats) * len(lons), dtype=float).reshape(
+        len(times), len(lats), len(lons)
+    )
+    ds = xr.Dataset(
+        {"VHM0": (["time", "latitude", "longitude"], data)},
+        coords={"time": times, "latitude": np.array(lats), "longitude": np.array(lons)},
+    )
+    path = str(tmp_path / name)
+    ds.to_netcdf(path)
+    return path
+
+
+class TestInputChecks:
+    def test_time_past_data_end_raises(self, tmp_path):
+        env = Environment(synthetic_tide=True)
+        env.load_data([write_swh(tmp_path, [32.4, 32.5, 32.6])])
+        env.update_buffers(DAYS_10[-1] + pd.Timedelta(hours=23))  # within one daily step
+        with pytest.raises(EnvironmentDataError, match="No 'VHM0'"):
+            env.update_buffers(DAYS_10[-1] + pd.Timedelta(days=5))
+
+    def test_allow_time_wrap_replays_from_start(self, tmp_path):
+        env = Environment(synthetic_tide=True, allow_time_wrap=True)
+        env.load_data([write_swh(tmp_path, [32.4, 32.5, 32.6])])
+        env.update_buffers(DAYS_10[0])
+        first = env.buffers["swh"]["data"].copy()
+        env.update_buffers(DAYS_10[-1] + (DAYS_10[-1] - DAYS_10[0]) + pd.Timedelta(days=9))
+        np.testing.assert_array_equal(env.buffers["swh"]["data"], first)
+
+    def test_descending_latitude_is_sorted(self, tmp_path):
+        env = Environment(synthetic_tide=True)
+        env.load_data([write_swh(tmp_path, [32.6, 32.5, 32.4])])
+        env.update_buffers(DAYS_10[0])
+        buf = env.buffers["swh"]
+        assert buf["lat_step"] > 0
+        assert buf["lats"][0] == pytest.approx(32.4)
+
+    def test_uneven_grid_raises(self, tmp_path):
+        env = Environment(synthetic_tide=True)
+        with pytest.raises(EnvironmentDataError, match="not uniform"):
+            env.load_data([write_swh(tmp_path, [32.4, 32.5, 32.9])])
+
+    def test_unreadable_file_raises_instead_of_being_skipped(self, tmp_path):
+        bad = tmp_path / "broken.nc"
+        bad.write_text("not a netcdf file")
+        with pytest.raises(EnvironmentDataError, match="Failed to load"):
+            Environment(synthetic_tide=True).load_data([str(bad)])
+
+    def test_missing_variable_warns_once(self, tmp_path, caplog):
+        env = Environment(synthetic_tide=True)
+        env.load_data([write_swh(tmp_path, [32.4, 32.5, 32.6])])
+        with caplog.at_level("WARNING"):
+            env.update_buffers(DAYS_10[0])
+            env.update_buffers(DAYS_10[1])
+        assert sum("'chl'" in r.message for r in caplog.records) == 1

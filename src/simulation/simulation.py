@@ -31,6 +31,7 @@ class Simulation:
         time_step_hours: int = 1,
         output_file: str = "simulation_results.csv",
         synthetic_tide: bool = False,
+        allow_time_wrap: bool = False,
         seed: int | None = None,
         overwrite: bool = False,
     ):
@@ -46,7 +47,9 @@ class Simulation:
         self.seed = seed if seed is not None else int(np.random.SeedSequence().entropy % 2**32)
         self.rng = np.random.default_rng(self.seed)
 
-        self.environment = Environment(synthetic_tide=synthetic_tide)
+        self.environment = Environment(
+            synthetic_tide=synthetic_tide, allow_time_wrap=allow_time_wrap
+        )
         self.agents: list[SealAgent] = []
 
         # Track history for analysis (flushed to disk every 24 steps)

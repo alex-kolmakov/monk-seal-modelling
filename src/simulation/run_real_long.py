@@ -29,6 +29,7 @@ def run_long_simulation(
     config=None,
     synthetic_tide: bool = False,
     overwrite: bool = False,
+    allow_time_wrap: bool = False,
 ):
     """Run a monk seal simulation for the given date range.
 
@@ -78,6 +79,7 @@ def run_long_simulation(
         time_step_hours=1,
         output_file=output_csv,
         synthetic_tide=synthetic_tide,
+        allow_time_wrap=allow_time_wrap,
         seed=seed,
         overwrite=overwrite,
     )
@@ -94,6 +96,7 @@ def run_long_simulation(
         tide_source=sim.environment.tide_source,
         tide_file=sim.environment.tide_file,
         tide_datum_m=TIDE_DATUM_M,
+        allow_time_wrap=allow_time_wrap,
         nc_files=nc_files,
     )
     _write_run_metadata(output_csv, **meta)
@@ -126,6 +129,8 @@ if __name__ == "__main__":
                         help="Use a 12.4 h sine tide instead of ssh_{tag}.nc (IBI zos)")
     parser.add_argument("--overwrite", action="store_true",
                         help="Replace an existing output CSV (default: refuse)")
+    parser.add_argument("--allow-time-wrap", action="store_true",
+                        help="Replay input data from its start past its end (default: error)")
     args = parser.parse_args()
 
     dt_from = datetime.strptime(args.date_from, "%d-%m-%Y")
@@ -143,4 +148,5 @@ if __name__ == "__main__":
         num_workers=args.workers,
         synthetic_tide=args.synthetic_tide,
         overwrite=args.overwrite,
+        allow_time_wrap=args.allow_time_wrap,
     )

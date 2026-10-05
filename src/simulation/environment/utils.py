@@ -31,11 +31,11 @@ def query_env_buffers(
     }
     """
     result = {
-        "swh": 0.0,
+        "swh": None,  # None = no data here (variable not loaded, or off its grid)
         "chl": None,
-        "temp": 18.0,
-        "uo": 0.0,
-        "vo": 0.0,
+        "temp": None,
+        "uo": None,
+        "vo": None,
         "is_land": False,
         "hsi": 0.0,
         "depth": None,

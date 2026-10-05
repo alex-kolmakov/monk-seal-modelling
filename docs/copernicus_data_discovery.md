@@ -127,7 +127,8 @@ For performance, environmental data is pre-fetched into numpy arrays at each tim
 
 1. **Update Buffers**: Load 2D arrays for current timestamp
 2. **Fast Lookup**: Use index calculation instead of xarray selection
-3. **Time Looping**: For swell, chlorophyll, temperature and currents, a time outside the dataset range wraps around. The tide never wraps: a time outside the `zos` range raises `TideDataError`.
+3. **No silent time wrap**: a time more than one native step outside any dataset raises `EnvironmentDataError` (`TideDataError` for the tide). `--allow-time-wrap` replays swell, chlorophyll, temperature and currents from their start; the tide never wraps.
+4. **Checked grids**: descending lat/lon are sorted on load; non-uniform spacing or an unreadable file raises. A position outside a grid gives `None` for that variable and is counted as `n_out_of_bounds` in `<output>_meta.json`.
 
 ```python
 # Fast index calculation for any lat/lon query
