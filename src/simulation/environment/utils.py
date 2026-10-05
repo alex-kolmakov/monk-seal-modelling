@@ -26,6 +26,32 @@ def _nearest_valid(data: np.ndarray, r_idx: int, c_idx: int) -> float | None:
     return found
 
 
+def _is_land_cell(data: np.ndarray, r: int, c: int) -> bool:
+    """NaN depth counts as land unless under half of its 3×3 neighbourhood is NaN
+    (then it is coastline, treated as water for navigation)."""
+    if not np.isnan(data[r, c]):
+        return False
+    rows, cols = data.shape
+    window = data[max(r - 1, 0) : min(r + 2, rows), max(c - 1, 0) : min(c + 2, cols)]
+    return bool(np.isnan(window).mean() >= 0.5)
+
+
+def navigation_grids(depth: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Per-cell land flag and navigable depth (NaN filled from the nearest water, NaN if
+    none within 3 cells) for a static bathymetry map. Computed once, so each probe in
+    query_env_buffers is a lookup instead of a neighbourhood search."""
+    rows, cols = depth.shape
+    land = np.zeros(depth.shape, dtype=bool)
+    filled = depth.astype(float).copy()
+    for r in range(rows):
+        for c in range(cols):
+            if np.isnan(depth[r, c]):
+                land[r, c] = _is_land_cell(depth, r, c)
+                v = _nearest_valid(depth, r, c)
+                filled[r, c] = np.nan if v is None else v
+    return land, filled
+
+
 def query_env_buffers(
     lat: float,
     lon: float,
@@ -75,6 +101,19 @@ def query_env_buffers(
         # IMPROVED LAND DETECTION: Check neighborhood to distinguish coastline from open water
         # Coastline cells have NaN but are surrounded by water
         # True land (islands) have NaN and are surrounded by more NaN cells
+        if key == "depth" and "land" in buf:
+            # Precomputed by navigation_grids (Environment builds them once)
+            if 0 <= r_idx < rows and 0 <= c_idx < cols:
+                original_depth_is_nan = bool(buf["land"][r_idx, c_idx])
+            else:
+                original_depth_is_nan = False
+                result["out_of_bounds"] = True
+                r_idx = max(0, min(r_idx, rows - 1))
+                c_idx = max(0, min(c_idx, cols - 1))
+            d = buf["filled"][r_idx, c_idx]
+            result["depth"] = None if np.isnan(d) else float(d)
+            continue
+
         if key == "depth":
             # Check if ORIGINAL position (before clamping) is within bounds
             if 0 <= r_idx < rows and 0 <= c_idx < cols:

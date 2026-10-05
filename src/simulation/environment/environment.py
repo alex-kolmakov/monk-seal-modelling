@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from .utils import query_env_buffers
+from .utils import navigation_grids, query_env_buffers
 
 # Configure sorting
 logging.basicConfig(level=logging.INFO)
@@ -220,6 +220,9 @@ class Environment:
                 else 1.0,
                 "shape": bm.shape,
             }
+            land, filled = navigation_grids(bm.values)
+            self._depth_buffer["land"] = land
+            self._depth_buffer["filled"] = filled
 
     def _load_tide(self, ds: xr.Dataset, fp: str):
         """Reduce hourly zos to a colony-mean height series in metres above the datum."""

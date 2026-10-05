@@ -52,3 +52,19 @@ def test_land_cell_feels_swell_of_nearest_water():
     swh[2, 2] = np.nan  # land on the wave grid
     r = query_env_buffers(32.2, -16.8, {"swh": buf(swh)})
     assert r["swh"] == 3.5, "a seal ashore must not read calm sea during a storm"
+
+
+def test_precomputed_navigation_grids_match_on_the_fly_queries():
+    from src.simulation.environment.utils import navigation_grids
+
+    rng = np.random.default_rng(0)
+    depth = rng.uniform(10, 300, (12, 12))
+    depth[3:7, 3:8] = np.nan  # island
+    depth[0, 11] = np.nan  # isolated NaN = coastline
+    plain = buf(depth)
+    land, filled = navigation_grids(depth)
+    fast = {**plain, "land": land, "filled": filled}
+    for lat, lon in rng.uniform([31.8, -17.2], [33.4, -15.6], (400, 2)):  # some off-grid
+        a = query_env_buffers(lat, lon, {"depth": plain})
+        b = query_env_buffers(lat, lon, {"depth": fast})
+        assert a == b, (lat, lon)
