@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import fields, replace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -111,7 +112,7 @@ EXTREME_PERTURBATIONS = {
 }
 
 
-def perturbations(name: str, value: float) -> list[float]:
+def perturbations(name: str, value: Any) -> list[Any]:
     """Up and down: a threshold may only bind on one side (e.g. 0.95 × 1.3 > 100%)."""
     if name in EXTREME_PERTURBATIONS:
         return EXTREME_PERTURBATIONS[name]

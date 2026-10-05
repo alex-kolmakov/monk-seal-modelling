@@ -211,6 +211,13 @@ class TestStormForcing:
         seal.update_with_buffers(make_land_buffers(swh=5.0, tide=-0.5))
         assert seal.state == SealState.TRANSITING
 
+    def test_resting_seal_does_not_start_haul_out_in_storm(self):
+        """RESTING at low tide normally hauls out; above max_landing_swell it must not.
+        (Found in a real run: the decision came after the storm check, so it landed.)"""
+        seal = make_seal(state=SealState.RESTING, energy_pct=0.9, stomach_load=5.0)
+        seal.update_with_buffers(make_sea_buffers(swh=5.0, tide=-0.5))
+        assert seal.state != SealState.HAULING_OUT
+
     def test_wash_off_toggle_off_leaves_sleeper_ashore_in_storm(self):
         cfg = SealConfig(storm_wash_off=False)
         seal = make_seal(state=SealState.SLEEPING, energy_pct=0.9, stomach_load=5.0, config=cfg)

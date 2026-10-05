@@ -175,6 +175,14 @@ class SealAgent:
         old_state = self.state
 
         self.decide_activity(env_data, is_land)
+        # A haul-out decided this step (e.g. RESTING at low tide) must also respect the
+        # swell, or the haul-out action lands the seal past the storm check above.
+        if (
+            self.state == SealState.HAULING_OUT
+            and swh > self.config.max_landing_swell
+            and self.config.storm_blocks_landing
+        ):
+            self.state = SealState.TRANSITING
         if self.state != old_state:
             self.state_duration = 0
             self.log(
