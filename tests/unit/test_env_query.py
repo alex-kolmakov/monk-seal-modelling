@@ -45,3 +45,10 @@ def test_malformed_buffer_raises_instead_of_being_skipped():
     broken = {"data": np.zeros((2, 2)), "lat_min": 32.0}  # no steps, no shape
     with pytest.raises(KeyError):
         query_env_buffers(32.0, -17.0, {"swh": broken})
+
+
+def test_land_cell_feels_swell_of_nearest_water():
+    swh = np.full((5, 5), 3.5)
+    swh[2, 2] = np.nan  # land on the wave grid
+    r = query_env_buffers(32.2, -16.8, {"swh": buf(swh)})
+    assert r["swh"] == 3.5, "a seal ashore must not read calm sea during a storm"

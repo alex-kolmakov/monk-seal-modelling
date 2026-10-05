@@ -8,6 +8,24 @@ from src.simulation.agents.config import SealConfig
 logging.basicConfig(level=logging.INFO)
 
 
+def _nearest_valid(data: np.ndarray, r_idx: int, c_idx: int) -> float | None:
+    """A non-NaN value from the nearest ring (1-3 cells, ~3-9 km) around a NaN cell."""
+    rows, cols = data.shape
+    found: float | None = None
+    for radius in range(1, 4):
+        if found is not None:
+            break
+        for dr in range(-radius, radius + 1):
+            for dc in range(-radius, radius + 1):
+                nr, nc = r_idx + dr, c_idx + dc
+                if 0 <= nr < rows and 0 <= nc < cols:
+                    v = data[nr, nc]
+                    if not np.isnan(v):
+                        found = float(v)
+                        break
+    return found
+
+
 def query_env_buffers(
     lat: float,
     lon: float,
@@ -93,28 +111,13 @@ def query_env_buffers(
         if 0 <= r_idx < rows and 0 <= c_idx < cols:
             val = buf["data"][r_idx, c_idx]
 
-            # Handling NaNs
+            # Handling NaNs (land on that variable's grid)
             if np.isnan(val):
-                # User Request: Infer depth for Holes?
-                if key == "depth":
-                    # Search spiral/radius for valid depth FOR NAVIGATION
-                    # Agent doesn't carry env data. Use buffers.
-                    found_depth: float | None = None
-                    for radius in range(1, 4):  # Check 3 layers (approx 3-9km)
-                        if found_depth is not None:
-                            break
-                        for dr in range(-radius, radius + 1):
-                            for dc in range(-radius, radius + 1):
-                                nr, nc = r_idx + dr, c_idx + dc
-                                if 0 <= nr < rows and 0 <= nc < cols:
-                                    v = buf["data"][nr, nc]
-                                    if not np.isnan(v):
-                                        found_depth = float(v)
-                                        break
-
-                    if found_depth is not None:
-                        result[key] = found_depth
-                    # Else leave as None (will be 9999 in defaults)
+                # depth: inferred for navigation. swh: a seal ashore or on the coast still
+                # feels the swell of the nearest water cell (NaN on land used to read as 0).
+                if key in ("depth", "swh"):
+                    result[key] = _nearest_valid(buf["data"], r_idx, c_idx)
+                    # None if nothing within 3 cells (depth: will be 9999 in defaults)
             else:
                 result[key] = float(val)
         else:
