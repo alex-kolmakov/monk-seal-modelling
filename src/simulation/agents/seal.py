@@ -707,9 +707,10 @@ class SealAgent:
             for _ in range(20):  # More samples to ensure we find a valid move
                 new_heading = self.rng.uniform(0, 2 * math.pi)
                 # Manual projection (simple approximation suffices for short steps)
-                new_lat = self.pos[0] + step_speed * math.cos(new_heading)
+                # Same convention as movement.correlated_random_walk: 0 = east
+                new_lat = self.pos[0] + step_speed * math.sin(new_heading)
                 # Adjust lon for latitude (approx)
-                new_lon = self.pos[1] + step_speed * math.sin(new_heading) / math.cos(
+                new_lon = self.pos[1] + step_speed * math.cos(new_heading) / math.cos(
                     math.radians(self.pos[0])
                 )
 
@@ -787,8 +788,8 @@ class SealAgent:
             if not valid_candidates and not currently_on_land:
                 for angle_i in range(20):
                     esc_heading = angle_i * (2 * math.pi / 20)
-                    esc_lat = self.pos[0] + step_speed * math.cos(esc_heading)
-                    esc_lon = self.pos[1] + step_speed * math.sin(esc_heading) / math.cos(
+                    esc_lat = self.pos[0] + step_speed * math.sin(esc_heading)
+                    esc_lon = self.pos[1] + step_speed * math.cos(esc_heading) / math.cos(
                         math.radians(self.pos[0])
                     )
                     esc_data = query_env_buffers(esc_lat, esc_lon, _nav(env_buffers))

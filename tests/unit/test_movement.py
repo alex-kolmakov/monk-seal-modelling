@@ -96,3 +96,41 @@ class TestRemoveDummyDataInParam:
             (pos, heading) = correlated_random_walk((32.5, -17.0), 0.0, speed=0.05)
 
         assert pos[0] == pytest.approx(32.5, abs=1e-6)   # latitude unchanged (east heading)
+
+
+class TestHeadingConvention:
+    """Every movement path stores heading as an angle from east (lat += sin, lon += cos),
+    the convention correlated_random_walk reads back. Audit finding 13: the land-escape
+    sampler used cos for lat, so persistence was rotated 90° after every escape."""
+
+    def test_escape_heading_points_where_the_seal_moved(self):
+        import numpy as np
+
+        from src.simulation.agents.seal import SealAgent
+
+        n, step = 41, 0.02
+        depth = np.full((n, n), 50.0)
+        c = n // 2
+        depth[c - 1 : c + 2, c - 1 : c + 2] = np.nan  # 3×3 island under the seal
+        lat0, lon0 = 32.5, -16.5
+        buffers = {
+            "depth": {
+                "data": depth,
+                "lat_min": lat0 - c * step,
+                "lat_step": step,
+                "lon_min": lon0 - c * step,
+                "lon_step": step,
+                "shape": depth.shape,
+            },
+            "tide": 0.0,
+        }
+        for seed in range(5):
+            seal = SealAgent("h", start_pos=(lat0, lon0), seed=seed)
+            seal.debug = False
+            seal._move_smart(buffers, intention="WATER", target_pos=None)
+            dlat = seal.pos[0] - lat0
+            dlon = (seal.pos[1] - lon0) * math.cos(math.radians(lat0))
+            moved = math.atan2(dlat, dlon) % (2 * math.pi)
+            stored = seal.heading % (2 * math.pi)
+            gap = abs((moved - stored + math.pi) % (2 * math.pi) - math.pi)
+            assert gap < 1e-6, f"seed {seed}: moved {moved:.3f} rad, stored {stored:.3f} rad"
