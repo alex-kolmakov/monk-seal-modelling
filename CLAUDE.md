@@ -25,7 +25,8 @@ uv run pyrefly check
 # Download environmental data (requires COPERNICUS_USERNAME/COPERNICUS_PASSWORD env vars)
 uv run python -m src.data_ingestion.download_data --from 01-01-2026 --to 30-05-2026  # writes *_{YYYYMMDD}_{YYYYMMDD}.nc
 
-# Run simulation (dates DD-MM-YYYY; needs ssh_{tag}.nc unless --synthetic-tide)
+# Run simulation (dates DD-MM-YYYY; needs ssh_{tag}.nc unless --synthetic-tide;
+# a run past the data end fails unless --allow-time-wrap; _meta.json records n_deaths, n_out_of_bounds)
 uv run python -m src.simulation.run_real_long --from 01-01-2026 --to 30-05-2026 --agents 30 --seed 42 --out results.csv
 
 # Generate animations
@@ -57,7 +58,8 @@ uv run python -m src.visualization.weather_visualizer --physics <nc> --waves <nc
 
 ### Key Patterns
 
-- **Configuration-as-Data**: Use `SealConfig` for all tunable parameters
+- **Configuration-as-Data**: Use `SealConfig` for all tunable parameters, including behaviour switches (`storm_blocks_landing`, `storm_wash_off`)
+- **No silent failures**: missing or off-grid environment values are `None` (counted as `n_out_of_bounds`), data gaps and irregular grids raise `EnvironmentDataError`
 - **FSM-driven behavior**: Agent states control all behavior decisions
 - **Buffer-based parallelism**: Environment buffers (not objects) passed to workers
 - **Domain terminology**: Code uses marine biology terms (e.g., hauling out, foraging, RMR)
