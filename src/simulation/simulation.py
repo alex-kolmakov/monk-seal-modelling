@@ -306,7 +306,6 @@ class Simulation:
         # Flush whatever remains (may be < 24 rows)
         if self.history:
             import csv as _csv
-            from pathlib import Path
 
             fieldnames = list(self.history[0].keys())
             output_path = Path(self.output_file)
