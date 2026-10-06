@@ -142,6 +142,18 @@ Both toggles are model assumptions: Pires et al. 2023 describe storm swell flood
 - Higher thresholds = seals tolerate rougher conditions
 - The gap affects how long seals remain in "storm mode"
 
+### Body Mass (optional second energy pool)
+
+| Parameter | Default | Unit | Description |
+|-----------|---------|------|-------------|
+| `mass_dynamics` | False | toggle | Store surplus energy as body mass and draw it back when energy runs low |
+| `tissue_energy_density` | 20000.0 | kJ/kg | Energy per kg of body mass stored or mobilised |
+| `lean_mass` | 240.0 | kg | Mass is never mobilised below this |
+
+With `mass_dynamics` on: surplus above `max_energy` becomes mass (`energy_stored_kj`) instead of being discarded; below `critical_energy_threshold`, mass above `lean_mass` refills energy up to that level (`energy_mobilised_kj`); RMR = `rmr` × (mass / `mass`)^0.75. The history gains `mass`, `energy_stored_kj` and `energy_mobilised_kj`.
+
+All three values are placeholders (phocid blubber 17.7–22.2 kJ/g, unverified for monk seals; lean floor from the 240–400 kg body-mass range). It is off by default until a reserve figure arrives: on the 2026 Jan–May run (30 seals, seed 42) it removes all 8 starvation deaths and the median seal ends at 365 kg (max 406 kg), with no upper limit on mass.
+
 ### Mortality
 
 | Parameter | Default | Unit | Description |
