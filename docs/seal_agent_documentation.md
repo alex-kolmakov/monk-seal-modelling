@@ -93,7 +93,7 @@ Phocid seals at rest measure ~1.0–1.3× Kleiber (Lavigne et al. 1986; Bowen & 
 
 ## Model Simplifications
 
-1. **Foraging Intake Rates**: Fixed rates (3 kg/h shallow, 1 kg/h medium, 0 kg/h deep) lack stochastic variation. Actual intake varies by prey type, individual experience, and patch quality.
+1. **Foraging Intake Rates**: Base rates by depth band (3 kg/h shallow, 1 kg/h medium, 0 kg/h deep) × HSI × a uniform 0.5–1.5 draw per hour. The draw stands in for prey type, individual experience and patch quality, none of which is modelled.
 2. **Energy Thresholds**: Starvation (10%) and critical energy (15%) thresholds based on general pinniped physiology. Require validation through sensitivity analysis and calibration against observed survival rates.
 3. **Energy-Mass Conversion**: 3,500 kJ per kg of digested food is a model assumption without direct empirical validation.
 
