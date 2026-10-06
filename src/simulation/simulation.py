@@ -320,7 +320,8 @@ class Simulation:
 
             logger.info(f"Results saved to {self.output_file}")
             self.history = []
-        else:
+        elif not Path(self.output_file).exists():
+            # Rows are flushed to disk every 24 h, so an empty buffer here is normal
             logger.warning("No history to save.")
 
         # Save Daily Stats
