@@ -227,6 +227,9 @@ class Simulation:
                     "energy_in_kj": agent.energy_in_kj,
                     "energy_burned_kj": agent.energy_burned_kj,
                     "energy_discarded_kj": agent.energy_discarded_kj,
+                    "energy_stored_kj": agent.energy_stored_kj,
+                    "energy_mobilised_kj": agent.energy_mobilised_kj,
+                    "mass": agent.mass,
                     **env_data,
                 }
             )

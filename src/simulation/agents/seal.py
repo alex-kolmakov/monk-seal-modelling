@@ -71,12 +71,15 @@ class SealAgent:
         self.energy = self.config.initial_energy
         self.max_energy = self.config.max_energy
 
-        # Energy ledger (cumulative kJ): every hour, Δenergy = in - burned - discarded.
-        # "discarded" is surplus clipped at max_energy; it becomes stored mass once
-        # mass is a live state variable.
+        # Energy ledger (cumulative kJ). Every hour:
+        #   Δenergy = in - burned - discarded - stored + mobilised
+        # "discarded" is surplus clipped at max_energy; with mass_dynamics it is "stored"
+        # as body mass instead, and "mobilised" is mass drawn back into energy.
         self.energy_in_kj = 0.0
         self.energy_burned_kj = 0.0
         self.energy_discarded_kj = 0.0
+        self.energy_stored_kj = 0.0
+        self.energy_mobilised_kj = 0.0
         self.rmr = self.config.rmr
 
         # Parental State
@@ -169,6 +172,7 @@ class SealAgent:
                 return
 
         self.burn_energy()
+        self._mobilise_mass()
         if self.energy <= self.max_energy * self.config.starvation_threshold:
             self.log(f"DIED of Starvation (Critical Condition). Energy={self.energy:.1f}")
             self.state = SealState.DEAD
@@ -1193,7 +1197,25 @@ class SealAgent:
         surplus = self.energy - self.max_energy
         if surplus > 0:
             self.energy = self.max_energy
-            self.energy_discarded_kj += surplus
+            if self.config.mass_dynamics:
+                self.mass += surplus / self.config.tissue_energy_density
+                self.energy_stored_kj += surplus
+            else:
+                self.energy_discarded_kj += surplus
+
+    def _mobilise_mass(self):
+        """Below the critical level, draw body mass above lean_mass back into energy."""
+        floor = self.max_energy * self.config.critical_energy_threshold
+        if not self.config.mass_dynamics or self.energy >= floor:
+            return
+        density = self.config.tissue_energy_density
+        available = max(0.0, self.mass - self.config.lean_mass) * density
+        kj = min(floor - self.energy, available)
+        if kj <= 0:
+            return
+        self.mass -= kj / density
+        self.energy += kj
+        self.energy_mobilised_kj += kj
 
     def burn_energy(self):
         # Active Metabolic Rate (AMR) = amr_multiplier × RMR for active states
@@ -1204,6 +1226,9 @@ class SealAgent:
             # Near-torpid during critical recovery; maximise digestion window
             multiplier = self.config.recovery_metabolic_multiplier
 
-        cost = self.rmr * multiplier
+        rmr = self.rmr
+        if self.config.mass_dynamics:
+            rmr *= (self.mass / self.config.mass) ** 0.75  # Kleiber scaling
+        cost = rmr * multiplier
         self.energy -= cost
         self.energy_burned_kj += cost

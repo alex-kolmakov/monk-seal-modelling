@@ -25,8 +25,14 @@ HOURS = 300  # ~4 swell cycles; 200 also passes but with little margin
 SEED = 7
 
 # Fields that are not wired to behaviour yet, with the plan step that wires them.
-NOT_YET_WIRED = {
-    "mass": "mass is not a live state yet (P1 step 3, blocked on a blubber-mass source)",
+NOT_YET_WIRED: dict[str, str] = {}
+
+# Fields that only act behind a toggle: perturb them with the toggle on, against a
+# baseline that has it on too.
+REQUIRES = {
+    "mass": {"mass_dynamics": True},
+    "tissue_energy_density": {"mass_dynamics": True},
+    "lean_mass": {"mass_dynamics": True},
 }
 
 
@@ -121,14 +127,14 @@ def perturbations(name: str, value: Any) -> list[Any]:
     return [value * 1.3, value * 0.7] if value != 0 else [0.5]
 
 
-BASELINE = None
+_BASELINES: dict[tuple, list[tuple]] = {}
 
 
-def baseline() -> list[tuple]:
-    global BASELINE
-    if BASELINE is None:
-        BASELINE = trajectory(SealConfig())
-    return BASELINE
+def baseline(**overrides: Any) -> list[tuple]:
+    key = tuple(sorted(overrides.items()))
+    if key not in _BASELINES:
+        _BASELINES[key] = trajectory(SealConfig(**overrides))
+    return _BASELINES[key]
 
 
 def test_baseline_run_exercises_the_model():
@@ -148,8 +154,10 @@ def test_baseline_run_exercises_the_model():
     ],
 )
 def test_every_config_field_changes_behaviour(name):
+    overrides = REQUIRES.get(name, {})
+    base = SealConfig(**overrides)
     changed = any(
-        trajectory(replace(SealConfig(), **{name: value})) != baseline()
-        for value in perturbations(name, getattr(SealConfig(), name))
+        trajectory(replace(base, **{name: value})) != baseline(**overrides)
+        for value in perturbations(name, getattr(base, name))
     )
     assert changed, f"SealConfig.{name} has no effect on behaviour"

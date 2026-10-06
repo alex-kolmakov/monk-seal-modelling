@@ -67,6 +67,15 @@ class SealConfig:
     storm_blocks_landing: bool = True  # No landing: a seal hauling out turns back to sea
     storm_wash_off: bool = True  # Seals already ashore are washed back into the water
 
+    # === BODY MASS (second energy pool; off until a reserve figure arrives) ===
+    # On: surplus above max_energy is stored as body mass instead of discarded; below
+    # critical_energy_threshold, mass above lean_mass is drawn back into energy; RMR
+    # scales with (mass / mass at start)^0.75 (Kleiber). Placeholders, model assumptions:
+    mass_dynamics: bool = False
+    tissue_energy_density: float = 20000.0  # kJ/kg stored or mobilised (phocid blubber
+    # 17.7-22.2 kJ/g, unverified for monk seals)
+    lean_mass: float = 240.0  # kg - mass is never mobilised below this (ADW range 240-400 kg)
+
     # === MORTALITY ===
     # Background risk for adult males (age >= 4), from human interaction / boldness.
     # Model assumption. Upper bound: Pires et al. 2023 give adult male survival 0.90
