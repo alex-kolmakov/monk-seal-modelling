@@ -1,8 +1,9 @@
 """The energy budget closes: no energy is created or lost off the books.
 
 Every agent-hour: Δenergy = Δin − Δburned − Δdiscarded − Δstored + Δmobilised.
-"discarded" is surplus clipped at max_energy. With mass_dynamics it is "stored" as body
-mass instead, "mobilised" is mass drawn back into energy, and Δmass × density reconciles.
+With mass_dynamics, surplus above max_energy is "stored" as body mass, "mobilised" is
+mass drawn back into energy, and Δmass × density reconciles. "discarded" is surplus that
+cannot be stored (mass at max_mass, or mass_dynamics off).
 
 Run: uv run pytest tests/unit/test_energy_budget.py -v
 """
@@ -16,6 +17,7 @@ from src.simulation.agents.seal import SealAgent, SealState
 from tests.unit.test_seal_fsm import make_sea_buffers
 
 KJ_PER_KG = 3500.0
+MASS_OFF = SealConfig(mass_dynamics=False)  # single energy pool: surplus is discarded
 
 
 def seal(state: SealState = SealState.RESTING, energy: float = 50_000.0, stomach: float = 0.0,
@@ -56,7 +58,7 @@ class TestNoFreeEnergy:
         assert s.energy == pytest.approx(50_000.0 + 2.0 * KJ_PER_KG)
 
     def test_surplus_above_max_energy_is_counted_not_lost(self):
-        s = seal(SealState.SLEEPING, stomach=1.0)
+        s = seal(SealState.SLEEPING, stomach=1.0, config=MASS_OFF)
         s.energy = s.max_energy - 1000.0
         s.sleep({"tide": 0.0, "is_land": True}, {})
         assert s.energy == s.max_energy
@@ -67,7 +69,8 @@ class TestBudgetCloses:
     @pytest.mark.parametrize("seed", [1, 2, 3])
     def test_every_agent_hour(self, seed):
         """Forage/rest/sleep cycles in shallow, productive water for ~3 months."""
-        s = seal(SealState.FORAGING, energy=60_000.0, seed=seed, agent_id=str(seed))
+        s = seal(SealState.FORAGING, energy=60_000.0, seed=seed, agent_id=str(seed),
+                 config=MASS_OFF)
         buffers = make_sea_buffers(depth=30.0, chl=0.5)
 
         for hour in range(2000):
@@ -88,12 +91,34 @@ MASS_ON = SealConfig(mass_dynamics=True)
 
 
 class TestMassDynamics:
-    def test_off_by_default_surplus_is_discarded(self):
-        s = seal(SealState.SLEEPING, stomach=1.0)
+    def test_switched_off_surplus_is_discarded(self):
+        s = seal(SealState.SLEEPING, stomach=1.0, config=MASS_OFF)
         s.energy = s.max_energy - 1000.0
         s.sleep({"tide": 0.0, "is_land": True}, {})
         assert s.mass == SealConfig().mass
         assert s.energy_stored_kj == 0.0
+        assert s.energy_discarded_kj == pytest.approx(KJ_PER_KG - 1000.0)
+
+    def test_no_storage_above_max_mass(self):
+        s = seal(SealState.SLEEPING, stomach=1.0, config=MASS_ON)
+        s.mass = MASS_ON.max_mass - 0.05  # room for 0.05 kg only
+        s.energy = s.max_energy - 1000.0
+        s.sleep({"tide": 0.0, "is_land": True}, {})
+        room = 0.05 * MASS_ON.tissue_energy_density
+        assert s.mass == pytest.approx(MASS_ON.max_mass)
+        assert s.energy_stored_kj == pytest.approx(room)
+        assert s.energy_discarded_kj == pytest.approx(KJ_PER_KG - 1000.0 - room)
+
+    def test_resting_female_survives_a_seven_week_fast(self):
+        """Hawaiian monk seal females fast through a 5-7 week lactation and are not
+        starving at the end (Johanos et al. 1994). Resting is
+        cheaper than lactating, so this is the minimum the reserve must cover."""
+        s = seal(SealState.RESTING, energy=MASS_ON.initial_energy, config=MASS_ON)
+        for _ in range(7 * 7 * 24):
+            s.burn_energy()
+            s._mobilise_mass()
+        assert s.energy > s.max_energy * MASS_ON.starvation_threshold
+        assert s.mass > MASS_ON.lean_mass
 
     def test_surplus_becomes_body_mass(self):
         s = seal(SealState.SLEEPING, stomach=1.0, config=MASS_ON)

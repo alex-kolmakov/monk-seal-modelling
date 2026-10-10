@@ -33,6 +33,7 @@ REQUIRES = {
     "mass": {"mass_dynamics": True},
     "tissue_energy_density": {"mass_dynamics": True},
     "lean_mass": {"mass_dynamics": True},
+    "max_mass": {"mass_dynamics": True},
 }
 
 
@@ -97,6 +98,8 @@ def trajectory(config: SealConfig) -> list[tuple]:
                       config=config, seed=SEED)
         if frac is not None:
             a.energy = frac * config.max_energy
+        if i == 3:
+            a.mass = config.lean_mass  # no body reserve: the only seal that can starve
         a.stomach_load = stomach
         a.state = state
         agents.append(a)

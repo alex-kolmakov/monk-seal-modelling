@@ -52,6 +52,7 @@ class TestDeathsRecorded:
         sim = void_sim(tmp_path, "out.csv", agents=2)
         starving = sim.agents[0]
         starving.energy = starving.max_energy * 0.10 + 1.0  # next burn crosses the line
+        starving.mass = starving.config.lean_mass  # no body reserve left to draw on
 
         with ThreadPoolExecutor(1) as ex:
             for _ in range(3):
@@ -67,6 +68,7 @@ class TestDeathsRecorded:
         sim = void_sim(tmp_path, "out.csv", agents=3)
         for agent in sim.agents[:2]:
             agent.energy = agent.max_energy * 0.10 + 1.0
+            agent.mass = agent.config.lean_mass
 
         with ThreadPoolExecutor(1) as ex:
             for _ in range(25):  # midnight stat on step 0 and step 24

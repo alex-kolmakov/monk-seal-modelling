@@ -17,7 +17,7 @@ class SealConfig:
     mass: float = 300.0  # kg - Adult female body mass
     stomach_capacity: float = 15.0  # kg - Maximum stomach load (~5% body mass)
     initial_energy: float = 90000.0  # Starting energy (90% of max)
-    max_energy: float = 100000.0  # Maximum energy capacity
+    max_energy: float = 100000.0  # Short-term energy buffer; the reserve is body mass
 
     # === METABOLIC RATES ===
     # RMR: Resting Metabolic Rate (kJ/h)
@@ -67,14 +67,23 @@ class SealConfig:
     storm_blocks_landing: bool = True  # No landing: a seal hauling out turns back to sea
     storm_wash_off: bool = True  # Seals already ashore are washed back into the water
 
-    # === BODY MASS (second energy pool; off until a reserve figure arrives) ===
-    # On: surplus above max_energy is stored as body mass instead of discarded; below
-    # critical_energy_threshold, mass above lean_mass is drawn back into energy; RMR
-    # scales with (mass / mass at start)^0.75 (Kleiber). Placeholders, model assumptions:
-    mass_dynamics: bool = False
-    tissue_energy_density: float = 20000.0  # kJ/kg stored or mobilised (phocid blubber
-    # 17.7-22.2 kJ/g, unverified for monk seals)
-    lean_mass: float = 240.0  # kg - mass is never mobilised below this (ADW range 240-400 kg)
+    # === BODY MASS (the fasting reserve; max_energy is only the short-term buffer) ===
+    # Surplus above max_energy is stored as body mass up to max_mass (the rest is
+    # discarded); below critical_energy_threshold, mass above lean_mass is drawn back
+    # into energy; RMR scales with (mass / mass at start)^0.75 (Kleiber).
+    # No body composition data exist for either monk seal species (monk seal
+    # researcher, pers. comm. 2026-10-07), so the values are northern elephant seal
+    # proxies. The check: Hawaiian monk seal females fast through a 5-7 week
+    # lactation (Johanos et al. 1994).
+    mass_dynamics: bool = True
+    # kJ/kg stored or mobilised. Elephant seal females gain 1,664 MJ per 86.7 kg at sea
+    # (19 MJ/kg, Holser et al. 2023) and lose ~23 MJ/kg in lactation (from Fowler et al.
+    # 2008 mass and blubber change).
+    tissue_energy_density: float = 20000.0
+    # kg - mass is never mobilised below this: 60% of max_mass, as elephant seal females
+    # lose up to ~40% of their mass in lactation (Fowler et al. 2008)
+    lean_mass: float = 240.0
+    max_mass: float = 400.0  # kg - no storage above this (top of the ADW 240-400 kg range)
 
     # === MORTALITY ===
     # Background risk for adult males (age >= 4), from human interaction / boldness.

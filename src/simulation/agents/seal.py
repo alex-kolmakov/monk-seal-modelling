@@ -73,8 +73,9 @@ class SealAgent:
 
         # Energy ledger (cumulative kJ). Every hour:
         #   Δenergy = in - burned - discarded - stored + mobilised
-        # "discarded" is surplus clipped at max_energy; with mass_dynamics it is "stored"
-        # as body mass instead, and "mobilised" is mass drawn back into energy.
+        # With mass_dynamics, surplus above max_energy is "stored" as body mass and
+        # "mobilised" is mass drawn back into energy. "discarded" is surplus that cannot
+        # be stored (mass at max_mass, or mass_dynamics off).
         self.energy_in_kj = 0.0
         self.energy_burned_kj = 0.0
         self.energy_discarded_kj = 0.0
@@ -1198,10 +1199,12 @@ class SealAgent:
         if surplus > 0:
             self.energy = self.max_energy
             if self.config.mass_dynamics:
-                self.mass += surplus / self.config.tissue_energy_density
-                self.energy_stored_kj += surplus
-            else:
-                self.energy_discarded_kj += surplus
+                density = self.config.tissue_energy_density
+                stored = min(surplus, max(0.0, self.config.max_mass - self.mass) * density)
+                self.mass += stored / density
+                self.energy_stored_kj += stored
+                surplus -= stored
+            self.energy_discarded_kj += surplus
 
     def _mobilise_mass(self):
         """Below the critical level, draw body mass above lean_mass back into energy."""

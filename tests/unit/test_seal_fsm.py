@@ -253,14 +253,22 @@ class TestDeathAndZombie:
     """Starvation, mortality, and zombie-guard behaviour."""
 
     def test_starvation_triggers_dead_state(self):
-        """Energy below 10% of max → seal dies of starvation.
+        """Energy below 10% of max with no body reserve left → seal dies of starvation.
 
         burn_energy() runs first each tick; at 9% energy the post-burn check
         at update_with_buffers:L136 sets state=DEAD and returns.
         """
         seal = make_seal(state=SealState.FORAGING, energy_pct=0.09)
+        seal.mass = seal.config.lean_mass
         seal.update_with_buffers(make_sea_buffers())
         assert seal.state == SealState.DEAD
+
+    def test_body_reserve_prevents_starvation(self):
+        """The same seal with mass above lean_mass draws on it instead of dying."""
+        seal = make_seal(state=SealState.FORAGING, energy_pct=0.09)
+        seal.update_with_buffers(make_sea_buffers())
+        assert seal.state != SealState.DEAD
+        assert seal.mass < seal.config.mass
 
     def test_dead_agent_decide_activity_preserves_dead_state(self):
         """decide_activity must be a no-op for dead agents under any conditions."""
