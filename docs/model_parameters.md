@@ -29,25 +29,25 @@ custom_config = SealConfig(
 | `mass` | 300.0 | kg | Adult body mass (used for allometric calculations) |
 | `stomach_capacity` | 15.0 | kg | Maximum stomach load (~5% of body mass) |
 | `initial_energy` | 90000.0 | kJ | Starting energy level (90% of max) |
-| `max_energy` | 100000.0 | kJ | Maximum energy storage capacity |
+| `max_energy` | 100000.0 | kJ | Short-term energy buffer; the fasting reserve is body mass, see Body Mass |
 
 **Tuning tips:**
 - Increase `stomach_capacity` to allow more "binge feeding" between rest periods
 - Adjust `initial_energy` to simulate seals starting in different body conditions
-- `max_energy` affects how long seals can survive without food
+- `max_energy` sets how soon a hungry seal starts drawing on body mass; with `mass_dynamics` off it is the whole reserve
 
 ### Metabolic Rates
 
 | Parameter | Default | Unit | Description |
 |-----------|---------|------|-------------|
-| `rmr` | 750.0 | kJ/h | Resting Metabolic Rate (energy burn at rest) |
+| `rmr` | 1056.0 | kJ/h | Resting Metabolic Rate at the starting mass (scales with mass^0.75) |
 | `amr_multiplier` | 1.5 | - | Active Metabolic Rate multiplier (AMR = RMR × this) |
 | `recovery_metabolic_multiplier` | 0.5 | - | Metabolic multiplier in RECOVERY (near-torpid; model assumption) |
 
 **Tuning tips:**
 - `rmr` is the most sensitive parameter for survival outcomes
-- Lower RMR (500-650) = hypometabolism scenarios
-- Higher RMR (750-900) = closer to the reported phocid range; 750 is the Madeira default
+- Lower RMR (500-750) = hypometabolism scenarios; seals gain mass up to `max_mass`
+- 880–1,144 = the reported phocid range (1.0–1.3× Kleiber); 1,056 is the Madeira default
 - `amr_multiplier` affects energy cost of foraging, transiting, and hauling out
 
 **Derivation:**
@@ -55,7 +55,7 @@ custom_config = SealConfig(
 Kleiber equation: RMR = 293 × M^0.75
 For 300kg seal: 293 × 72.08 ≈ 880 kJ/h (terrestrial baseline)
 Phocid seals at rest: ~1.0–1.3× Kleiber (Lavigne et al. 1986) (unverified)
-Madeira model: uses 750 kJ/h (~0.85× Kleiber), below that range — a model assumption
+Madeira model: uses 1,056 kJ/h (1.20× Kleiber), calibrated — see Body Mass
 ```
 
 ### Foraging Rates
@@ -94,7 +94,7 @@ effective_rate = base_foraging_rate × max(hsi_floor, hsi)
 
 | Parameter | Default | Unit | Description |
 |-----------|---------|------|-------------|
-| `starvation_threshold` | 0.10 | ratio | Energy level that causes death (10% of max) |
+| `starvation_threshold` | 0.10 | ratio | Energy level that causes death (10% of max); reached only when body mass is down to `lean_mass` |
 | `critical_energy_threshold` | 0.15 | ratio | Energy level that triggers desperate foraging (15%) |
 | `tired_energy_fraction` | 0.20 | ratio | Below this, a foraging seal stops to rest; a bottling seal stays asleep |
 | `wake_energy_fraction` | 0.95 | ratio | A seal asleep on land with an empty stomach wakes below this |
@@ -142,17 +142,38 @@ Both toggles are model assumptions: Pires et al. 2023 describe storm swell flood
 - Higher thresholds = seals tolerate rougher conditions
 - The gap affects how long seals remain in "storm mode"
 
-### Body Mass (optional second energy pool)
+### Body Mass (the fasting reserve)
 
 | Parameter | Default | Unit | Description |
 |-----------|---------|------|-------------|
-| `mass_dynamics` | False | toggle | Store surplus energy as body mass and draw it back when energy runs low |
+| `mass_dynamics` | True | toggle | Store surplus energy as body mass and draw it back when energy runs low |
 | `tissue_energy_density` | 20000.0 | kJ/kg | Energy per kg of body mass stored or mobilised |
 | `lean_mass` | 240.0 | kg | Mass is never mobilised below this |
+| `max_mass` | 400.0 | kg | No storage above this; further surplus is discarded |
 
-With `mass_dynamics` on: surplus above `max_energy` becomes mass (`energy_stored_kj`) instead of being discarded; below `critical_energy_threshold`, mass above `lean_mass` refills energy up to that level (`energy_mobilised_kj`); RMR = `rmr` × (mass / `mass`)^0.75. The history gains `mass`, `energy_stored_kj` and `energy_mobilised_kj`.
+Surplus above `max_energy` becomes mass (`energy_stored_kj`) up to `max_mass`, and is discarded beyond it; below `critical_energy_threshold`, mass above `lean_mass` refills energy up to that level (`energy_mobilised_kj`); RMR = `rmr` × (mass / `mass`)^0.75. A seal starves only once its mass is down to `lean_mass`. The history carries `mass`, `energy_stored_kj` and `energy_mobilised_kj`. With `mass_dynamics` off there is one energy pool and a resting seal starves in about 3 days.
 
-All three values are placeholders (phocid blubber 17.7–22.2 kJ/g, unverified for monk seals; lean floor from the 240–400 kg body-mass range). It is off by default until a reserve figure arrives: on the 2026 Jan–May run (30 seals, seed 42) it removes all 8 starvation deaths and the median seal ends at 365 kg (max 406 kg), with no upper limit on mass.
+**Where the values come from.** No body composition analysis exists for adult females of either monk seal species (monk seal researcher, pers. comm. 2026-10-07), so these are northern elephant seal proxies, the best-studied related phocid:
+
+- `tissue_energy_density`: females gain 1,663.6 MJ for 86.7 kg over a post-breeding foraging trip, 19 MJ/kg (N = 247, Holser et al. 2023). In lactation they go from 432.7 kg at 38.5% blubber to 317.0 kg at 30.6% in 17 days (Fowler et al. 2008), which at 35.4 MJ/kg adipose and 4.9 MJ/kg lean tissue (Holser et al. 2023) is about 23 MJ/kg lost. 20 MJ/kg sits between the two.
+- `lean_mass`: 60% of `max_mass`, as females lose up to ~40% of their mass over lactation (Fowler et al. 2008).
+- `max_mass`: the top of the 240–400 kg adult range (Animal Diversity Web).
+
+**The check.** Hawaiian monk seal females fast through a lactation of 39 days on average (range 27–50) and are not starving at the end (Johanos et al. 1994). In the model a 300 kg seal at rest has about 60 kg, or 1,200 MJ, to draw on, about seven weeks; a 400 kg seal has 3,200 MJ. `test_resting_female_survives_a_seven_week_fast` holds the model to this. Mediterranean monk seals also forage while they have a dependent pup, so they depend less on stored lipid than Hawaiian ones.
+
+**What keeps mass in check.** Metabolism scales with mass, so a heavier seal burns more until expenditure meets intake. At the old `rmr` of 750 kJ/h that point lay near 500 kg; at the calibrated 1,056 kJ/h (1.20× Kleiber, see the RMR derivation in `seal_agent_documentation.md`) the median seal's gain slows to about 1 kg a month.
+
+**What it does to a run.** 2026 Jan–May, 30 seals, seed 42:
+
+| | Single pool, `rmr` 750 | Reserve, `rmr` 750 | Reserve, `rmr` 1,056 (default) |
+|---|---|---|---|
+| Starvation deaths | 8 | 0 | 1 |
+| Median mass by month (Jan → May) | 300 kg flat | 304 → 364 kg | 300 → 322 kg |
+| Mass range at end | — | 284–400 kg | 265–347 kg |
+| Food per seal per day | 9.6 kg | 9.6 kg | 9.8 kg (about 3% of body mass) |
+| Time foraging | 35% | 37% | 35% |
+
+There are still no births, lactation or molt to spend the reserve on. `rmr` must be recalibrated when the bathymetry changes.
 
 ### Mortality
 
@@ -172,7 +193,7 @@ Model assumption. Pires et al. 2023 give adult male survival 0.90 (10%/yr from a
 **Tuning tips:**
 - Higher `digestion_rate` = faster recovery, shorter rest periods needed
 - `energy_per_kg_food` affects the energy balance equation directly
-- Maintenance at rest needs ~5.1 kg food/day (18,000 kJ at 750 kJ/h RMR ÷ 3,500 kJ/kg); active states need more
+- Maintenance at rest needs ~7.2 kg food/day (25,344 kJ at 1,056 kJ/h RMR ÷ 3,500 kJ/kg); active states need more
 
 ## Pre-configured Environments
 
@@ -182,7 +203,7 @@ Oligotrophic Atlantic environment with strong tidal forcing:
 
 ```python
 MADEIRA_CONFIG = SealConfig(
-    rmr=750.0,        # Phocid RMR baseline; food scarcity affects behaviour, not physiology
+    rmr=1056.0,       # 1.20× Kleiber; recalibrate when the bathymetry changes
     hsi_floor=0.5,    # Higher floor for low-chlorophyll waters
 )
 ```

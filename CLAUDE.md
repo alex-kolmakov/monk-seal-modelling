@@ -58,7 +58,7 @@ uv run python -m src.visualization.weather_visualizer --physics <nc> --waves <nc
 
 ### Key Patterns
 
-- **Configuration-as-Data**: Use `SealConfig` for all tunable parameters, including behaviour switches (`storm_blocks_landing`, `storm_wash_off`)
+- **Configuration-as-Data**: Use `SealConfig` for all tunable parameters, including behaviour switches (`storm_blocks_landing`, `storm_wash_off`, `mass_dynamics`)
 - **No silent failures**: missing or off-grid environment values are `None` (counted as `n_out_of_bounds`), data gaps and irregular grids raise `EnvironmentDataError`
 - **FSM-driven behavior**: Agent states control all behavior decisions
 - **Buffer-based parallelism**: Environment buffers (not objects) passed to workers
