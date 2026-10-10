@@ -23,8 +23,11 @@ class SealConfig:
     # RMR: Resting Metabolic Rate (kJ/h)
     # Kleiber baseline for 300kg: ~880 kJ/h
     # Phocid seals at rest: ~1.0–1.3× Kleiber (Lavigne et al. 1986; Bowen & Lavigne 1987)
-    # 750 kJ/h ≈ 0.85× Kleiber — appropriate for subtropical phocid
-    rmr: float = 750.0  # kJ/h - Phocid RMR for 300kg subtropical seal
+    # 1,056 kJ/h = 1.20× Kleiber, calibrated (2026-10-08, three seeds, Jan-May 2026):
+    # body mass roughly levels off and ~1 in 90 seals starves in five months, in line
+    # with adult survival 0.98 F / 0.90 M (Pires et al. 2023).
+    # RECALIBRATE when the bathymetry changes (EMODnet): food access shifts the balance.
+    rmr: float = 1056.0  # kJ/h at the starting mass; scales with mass^0.75
 
     # AMR multiplier (Active Metabolic Rate = RMR × this factor)
     amr_multiplier: float = 1.5  # Applied during FORAGING, TRANSITING, HAULING_OUT
@@ -98,6 +101,6 @@ class SealConfig:
 
 # Default configuration for Madeira (oligotrophic environment)
 MADEIRA_CONFIG = SealConfig(
-    rmr=750.0,  # Phocid RMR baseline; food scarcity affects behaviour, not physiology
+    rmr=1056.0,  # 1.20× Kleiber; recalibrate when the bathymetry changes
     hsi_floor=0.5,  # Higher floor for oligotrophic waters
 )

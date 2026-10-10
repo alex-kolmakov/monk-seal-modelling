@@ -268,7 +268,7 @@ The current parameters are drawn from published literature but many are uncertai
 
 - **Tide thresholds** — `low_tide_m` (−0.30 m) and `high_tide_m` (+0.30 m) above mean sea level control cave access and haul-out timing. These are placeholders: at what tide height do the Desertas cave beaches flood or become accessible?
 - **Storm swell** — above `max_landing_swell` (4 m) seals cannot land and are washed off land (`storm_blocks_landing`, `storm_wash_off`; both can be switched off). What swell actually floods the cave beaches?
-- **Energy budgets** — `rmr = 750 kJ/h` (~0.85× Kleiber for a 300kg subtropical phocid); does this match your field observations?
+- **Energy budgets** — `rmr = 1,056 kJ/h` (1.20× Kleiber for a 300 kg phocid, calibrated against adult survival); does this match your field observations?
 - **Foraging rates** — `shallow_foraging_rate = 3.0 kg/h` at depths < 50 m; are these realistic for Madeira's prey community?
 
 ### Activity Pattern Validation
