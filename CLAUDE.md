@@ -30,7 +30,7 @@ uv run python -m src.data_ingestion.download_data --from 01-01-2026 --to 30-05-2
 uv run python -m src.simulation.run_real_long --from 01-01-2026 --to 30-05-2026 --agents 30 --seed 42 --out results.csv
 
 # Generate animations
-uv run python -m src.visualization.seal_animator colony --colony-csv <csv> --physics-file <nc>
+uv run python -m src.visualization.seal_animator --colony-csv <csv> --physics-file <nc>  # colony is the default mode
 uv run python -m src.visualization.seal_animator single --seal-csv <csv> --physics-file <nc>
 uv run python -m src.visualization.weather_visualizer --physics <nc> --waves <nc> --bgc <nc> --tidal <nc>  # --tidal is still a legacy DUACS `adt` file
 ```

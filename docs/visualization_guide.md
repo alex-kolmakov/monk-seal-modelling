@@ -13,20 +13,25 @@ The visualization module provides two main animation tools:
 
 ## Seal Behavior Animation
 
-The `SealBehaviorAnimator` creates animated visualizations of seal tracking data overlaid on bathymetric maps.
+The default renderer is the `ColonyAnimator`: every seal of a run on one bathymetric map, with the colony's state next to it.
 
 ### Features
 
-- **Map Layer**: Bathymetry (sea depth) with land/coastline features
-- **Seal Track**: Historical movement path with color-coded behavioral states
-- **Metrics Panel**: Real-time display of energy, stomach load and depth
-- **State Legend**: Color-coded behavioral states (FORAGING, RESTING, SLEEPING, etc.)
+- **Map**: bathymetry, coastline and each seal's recent track, coloured by behavioural state
+- **Colony status**: seals alive, colony means of the energy buffer, stomach fill and fat reserve (body mass above `lean_mass`), and the live count per state
+- **Tide**: hourly sea level ±48 h around the current frame, with the `high_tide_m` / `low_tide_m` bands
+- **Swell**: mean and maximum significant wave height where the seals are, with the `storm_threshold` and `max_landing_swell` bands
+- **Body mass**: every seal's mass since the start of the run, the median, and the `lean_mass` floor
+
+Thresholds come from `SealConfig()` defaults. The tide, swell and mass panels read the run CSV's `tide`, `swh` and `mass` columns and stay empty (with a note) when a column is missing.
+
+`SealBehaviorAnimator` (`single` mode) follows one seal's track with its energy, stomach and depth.
 
 ### Usage
 
 ```bash
-# Whole colony from a simulation CSV
-uv run python -m src.visualization.seal_animator colony \
+# Whole colony from a simulation CSV (colony is the default mode, so the word can be left out)
+uv run python -m src.visualization.seal_animator \
   --colony-csv   data/real_long/long_sim_results.csv \
   --physics-file data/real_long/physics_20260101_20260530.nc \
   --output data/animations/colony.mp4 \
@@ -67,8 +72,9 @@ config = SealAnimationConfig(
 | SLEEPING | Red | Resting on land |
 | HAULING_OUT | Orange | Transitioning to land |
 | TRANSITING | Teal | Long-distance travel |
+| RECOVERY | Grey | Stopped at sea to digest when energy is critical |
 
-RECOVERY and DEAD have no colour in `SealAnimationConfig.state_colors`.
+DEAD has no colour: a dead seal leaves the map.
 
 ---
 

@@ -129,8 +129,9 @@ uv run python -m src.simulation.run_real_long \
 ### Visualize Results
 
 ```bash
-# Colony animation (requires a completed simulation CSV)
-uv run python -m src.visualization.seal_animator colony \
+# Colony animation, the default mode: map, colony status, tide, swell and body mass
+# (requires a completed simulation CSV)
+uv run python -m src.visualization.seal_animator \
   --colony-csv   data/real_long/long_sim_results.csv \
   --physics-file data/real_long/physics_20260101_20260530.nc
 
