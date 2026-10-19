@@ -90,5 +90,6 @@ class SealAnimationConfig:
             "SLEEPING": "#E74C3C",  # Red
             "RESTING": "#9B59B6",  # Purple
             "TRANSITING": "#1ABC9C",  # Teal
+            "RECOVERY": "#7F8C8D",  # Grey
         }
     )
