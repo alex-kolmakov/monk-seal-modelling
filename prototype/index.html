@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seal of Approval</title>
+<style>
+:root{--bg:#1c1c1c;--panel:#242424;--line:#3a3a3a;--fg:#ececec;--dim:#9a9a9a;--blue:#58C4DD;--yellow:#FFE45C;--green:#83C167}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+body{max-width:1000px;margin:0 auto;padding:10px max(12px,env(safe-area-inset-left)) 24px;display:flex;flex-direction:column;gap:8px}
+h1{font-size:17px;margin:0}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 14px}
+header .sub{color:var(--dim)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px}
+#wx{display:grid;grid-template-columns:auto repeat(3,minmax(0,1fr));gap:3px 14px;font-size:13px}
+#wx .k{color:var(--dim)} #wx .h{font-weight:700} #wx .v{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+#wx small{color:var(--dim);font-weight:400;font-size:11px}
+canvas{display:block;width:100%}
+#map{border-radius:6px;background:#10161b}
+#tl{cursor:ew-resize;background:#1a1a1a;border-radius:6px}
+#controls{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+button,select{background:#2e2e2e;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:3px 10px;font:inherit;cursor:pointer}
+button:hover,select:hover{border-color:var(--blue)}
+.hint{color:var(--dim);font-size:11px}
+#clock{font-variant-numeric:tabular-nums;font-weight:700;font-size:15px;margin-left:6px}
+.legend{display:flex;flex-wrap:wrap;gap:2px 14px;font-size:11px;color:var(--dim);margin-top:6px}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+.legend u{display:inline-block;width:14px;border-top:2px solid;margin-right:4px;vertical-align:middle}
+#note{color:var(--dim);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Seal of Approval</h1>
+  <span class="sub">Desertas caves: waves, swell and tide from the Copernicus IBI forecast</span>
+</header>
+
+<div class="card"><div id="wx"></div></div>
+
+<div class="card">
+  <canvas id="map"></canvas>
+  <div class="legend">
+    <span><i style="background:#ececec"></i>resting</span>
+    <span><i style="background:var(--blue)"></i>commuting</span>
+    <span><i style="background:var(--yellow)"></i>foraging</span>
+    <span><u style="border-color:#ececec"></u>waves</span>
+    <span><u style="border-color:var(--blue)"></u>swell</span>
+    <span id="note"></span>
+  </div>
+</div>
+
+<div id="controls">
+  <button id="play">Play</button>
+  <select id="speed">
+    <option value="3">3 h/s</option>
+    <option value="6" selected>6 h/s</option>
+    <option value="12">12 h/s</option>
+    <option value="24">24 h/s</option>
+  </select>
+  <button id="today">Jump to now</button>
+  <span class="hint">drag the timeline to scrub · space plays · &larr; &rarr; step one hour</span>
+  <span id="clock"></span>
+</div>
+<canvas id="tl"></canvas>
+
+<script src="bathymetry.js"></script>
+<script src="forecast.js"></script>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const F=window.FORECAST, CAVES=F.caves, NC=CAVES.length, NH=F.hours;
+const BASE_MS=Date.parse(F.start+":00:00Z");
+const TZ="Atlantic/Madeira";
+const fmtTime=new Intl.DateTimeFormat("en-GB",{timeZone:TZ,hour:"2-digit",minute:"2-digit",hour12:false});
+const fmtDay=new Intl.DateTimeFormat("en-GB",{timeZone:TZ,weekday:"short",day:"numeric",month:"short"});
+const fmtYmd=new Intl.DateTimeFormat("en-CA",{timeZone:TZ});
+const at=h=>new Date(BASE_MS+h*36e5);
+const hhmm=h=>fmtTime.format(at(h));
+const dayEdges=(()=>{const e=[0];let prev=fmtYmd.format(at(0));for(let h=1;h<NH;h++){const d=fmtYmd.format(at(h));if(d!==prev){e.push(h);prev=d}}e.push(NH);return e})();
+const NOW=clamp((Date.now()-BASE_MS)/36e5,0,NH-1);
+const CCOL=["#B39DFF","#FF9F43"]; // cave colours, kept apart from the seal-state colours
+
+/* ---------- sea floor ---------- */
+const B=window.BATHY,GW=B.w,GH=B.h;
+const elev=(()=>{const s=atob(B.elev),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return new Int16Array(u.buffer)})();
+const KM_X=(B.lon1-B.lon0)/GW*111.32*Math.cos(32.6*Math.PI/180),KM_Y=(B.lat1-B.lat0)/GH*110.95;
+const ASPECT=(GW*KM_X)/(GH*KM_Y);
+const gx=lon=>(lon-B.lon0)/(B.lon1-B.lon0)*GW,gy=lat=>(B.lat1-lat)/(B.lat1-B.lat0)*GH;
+function layer(land){
+  const c=document.createElement("canvas");c.width=GW;c.height=GH;const x=c.getContext("2d"),im=x.createImageData(GW,GH);
+  for(let i=0;i<GW*GH;i++){
+    const isLand=elev[i]>=0;
+    if(land&&!isLand)continue;
+    let r,g,b;
+    if(isLand){const e=Math.min(elev[i],1500)/1500;r=70+50*e;g=72+40*e;b=62+30*e}
+    else{const t=clamp(Math.log10(clamp(-elev[i],10,4000)/10)/Math.log10(400),0,1);r=34-24*t;g=78-60*t;b=104-72*t}
+    im.data.set([r,g,b,255],i*4)}
+  x.putImageData(im,0,0);return c;
+}
+const seaLayer=layer(false),landLayer=layer(true);
+
+/* ---------- forecast ---------- */
+const hourly=(a,t)=>{const i=Math.floor(t),f=t-i;return i>=NH-1?a[NH-1]:a[i]*(1-f)+a[i+1]*f};
+const dirHourly=(a,t)=>{const i=Math.floor(t),f=t-i,x=a[i],y=a[Math.min(i+1,NH-1)],d=((y-x+540)%360)-180;return (x+d*f+360)%360};
+const COMPASS=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+const compass=d=>COMPASS[Math.round(((d%360)+360)%360/22.5)%16];
+const meanDir=ds=>{let x=0,y=0;ds.forEach(d=>{x+=Math.sin(d*Math.PI/180);y+=Math.cos(d*Math.PI/180)});return (Math.atan2(x,y)*180/Math.PI+360)%360};
+const SW_MIN=0.5; // metres of swell below which no swell lines are drawn
+
+/* ---------- seals (optional: prototype/seals.json from simulate_forecast.py) ---------- */
+let SIM=null;
+const SIM_COL={FORAGING:"#FFE45C",TRANSITING:"#58C4DD"};
+const isLandAt=(x,y)=>x>=0&&y>=0&&x<GW&&y<GH&&elev[Math.floor(y)*GW+Math.floor(x)]>=0;
+const ASHORE=["HAULING_OUT","SLEEPING"]; // the only states that may be drawn on land
+function sealAt(tr,t){
+  const T0=(Date.parse(SIM.start+":00:00Z")-BASE_MS)/36e5,H=tr.lat.length,x=t-T0;
+  if(x<0||x>H-1)return null; // outside the model run: no frozen seals
+  const i=Math.floor(x),j=Math.min(i+1,H-1),f=x-i,k=f<.5?i:j,st=SIM.states[tr.s[k]];
+  if(st==="DEAD")return null;
+  const at=(a,b,u)=>[gx(tr.lon[a]*(1-u)+tr.lon[b]*u),gy(tr.lat[a]*(1-u)+tr.lat[b]*u)];
+  let p=at(i,j,f);
+  // the model moves in hourly steps; a straight line between two hours can cut a headland.
+  // A swimming seal that would be drawn on land stays at the nearer hourly position instead.
+  if(!ASHORE.includes(st)&&isLandAt(...p))p=[at(k,k,0),at(i,i,0),at(j,j,0)].find(q=>!isLandAt(...q))||p;
+  return {x:p[0],y:p[1],col:SIM_COL[st]||"#ececec"};
+}
+async function loadSeals(){
+  try{const r=await fetch("seals.json",{cache:"no-store"});if(!r.ok)throw 0;SIM=await r.json();
+    const end=(Date.parse(SIM.start+":00:00Z")-BASE_MS)/36e5+SIM.hours;
+    $("note").textContent=`${SIM.seals.length} seals from the model run of ${SIM.made}, covering ${fmtDay.format(at((Date.parse(SIM.start+":00:00Z")-BASE_MS)/36e5))} to ${fmtDay.format(at(Math.min(end,NH)))}`}
+  catch(e){$("note").textContent=location.protocol==="file:"?"no seals: serve this folder (python3 -m http.server) to load seals.json":"no seals.json yet: run simulate_forecast.py"}
+}
+
+/* ---------- map ---------- */
+const map=$("map"),mctx=map.getContext("2d");let dpr=1;
+function resizeMap(){dpr=Math.min(devicePixelRatio||1,2);const w=map.clientWidth,h=Math.round(w/ASPECT);map.style.height=h+"px";map.width=Math.round(w*dpr);map.height=Math.round(h*dpr)}
+// moving wave fronts: lines at right angles to the travel direction (opposite of the "from" bearing), thicker with height
+function fronts(W,H,fromDeg,hs,rgb,spacing,speed){
+  const th=fromDeg*Math.PI/180,tx=-Math.sin(th),ty=Math.cos(th),px=-ty,py=tx,R=Math.hypot(W,H),sp=spacing*dpr,ph=(performance.now()/1000*speed*dpr)%sp;
+  mctx.strokeStyle=`rgba(${rgb},${.05+.11*clamp(hs/2,0,1)})`;mctx.lineWidth=(.8+hs*1.3)*dpr;mctx.beginPath();
+  for(let s=-R+ph;s<R;s+=sp){const cx=W/2+tx*s,cy=H/2+ty*s;mctx.moveTo(cx-px*R,cy-py*R);mctx.lineTo(cx+px*R,cy+py*R)}
+  mctx.stroke();
+}
+function drawMap(t){
+  const W=map.width,H=map.height,sx=W/GW,sy=H/GH;
+  mctx.imageSmoothingEnabled=true;mctx.drawImage(seaLayer,0,0,W,H);
+  // one set of wave lines for the map: the mean of the cave forecasts; swell from the cave with the most
+  fronts(W,H,meanDir(CAVES.map(c=>dirHourly(c.dir,t))),CAVES.reduce((a,c)=>a+hourly(c.hs,t),0)/NC,"236,236,236",34,22);
+  let best=null,bh=0;CAVES.forEach(c=>{const h=hourly(c.sw,t);if(h>bh){bh=h;best=c}});
+  if(best&&bh>=SW_MIN)fronts(W,H,dirHourly(best.swdir,t),bh,"88,196,221",78,15);
+  mctx.drawImage(landLayer,0,0,W,H);
+  mctx.font=`${12*dpr}px system-ui`;mctx.fillStyle="rgba(236,236,236,.75)";mctx.textAlign="left";
+  mctx.fillText("Madeira",gx(-16.98)*sx,gy(32.80)*sy);mctx.fillText("Desertas",gx(-16.40)*sx,gy(32.43)*sy);
+  CAVES.forEach((c,ci)=>{
+    const cx=gx(c.lon)*sx,cy=gy(c.lat)*sy,hs=hourly(c.hs,t),dir=dirHourly(c.dir,t);
+    mctx.strokeStyle=CCOL[ci];mctx.lineWidth=2*dpr;mctx.beginPath();mctx.arc(cx,cy,5*dpr,0,6.283);mctx.stroke();
+    const west=ci===0,lines=[c.name,`${hs.toFixed(1)} m from ${compass(dir)}`],m=dpr,pad=6*m,lh=15*m;
+    mctx.font=`bold ${12*m}px system-ui`;const w=Math.max(...lines.map(s=>mctx.measureText(s).width))+2*pad,h=lines.length*lh+pad;
+    const x0=west?cx-16*m-w:cx+16*m,y0=(west?cy+26*m:cy-26*m)-h/2;
+    mctx.fillStyle="rgba(16,22,27,.88)";mctx.strokeStyle="rgba(236,236,236,.35)";mctx.lineWidth=m;mctx.beginPath();mctx.roundRect(x0,y0,w,h,5*m);mctx.fill();mctx.stroke();
+    lines.forEach((s,i)=>{mctx.font=`${i?"":"bold "}${i?11:12}px system-ui`.replace(/(\d+)px/,(a,n)=>n*m+"px");mctx.fillStyle=i?"rgba(236,236,236,.85)":CCOL[ci];mctx.fillText(s,x0+pad,y0+pad/2+lh*(i+.75))});
+  });
+  if(SIM)for(const tr of SIM.seals){const s=sealAt(tr,t);if(!s)continue;mctx.fillStyle=s.col;mctx.beginPath();mctx.arc(s.x*sx,s.y*sy,3.2*dpr,0,6.283);mctx.fill()}
+}
+
+/* ---------- timeline: wave height per cave and the tide ---------- */
+const tl=$("tl"),tctx=tl.getContext("2d");let tdpr=1;
+const PADL=60,PADR=8,PH=70,GAP=22,TLH=GAP+PH+GAP+PH+16;
+function resizeTl(){tdpr=Math.min(devicePixelRatio||1,2);tl.width=Math.round(tl.clientWidth*tdpr);tl.height=Math.round(TLH*tdpr);tl.style.height=TLH+"px"}
+function drawTl(t){
+  const W=tl.width,H=tl.height,d=tdpr,L=PADL*d,R=W-PADR*d,xOf=h=>L+(R-L)*h/NH;
+  tctx.clearRect(0,0,W,H);tctx.textBaseline="alphabetic";
+  const panels=[{title:"Wave height",min:0,max:Math.max(3,Math.ceil(Math.max(...CAVES.flatMap(c=>c.hs))+.3)),unit:"m",get:(c)=>c.hs},
+                {title:"Tide",min:-1.5,max:1.5,unit:"m",get:(c)=>c.tide,once:true}];
+  panels.forEach((pn,pi)=>{
+    const top=(GAP+pi*(PH+GAP))*d,bot=top+PH*d,y=v=>bot-(bot-top)*clamp((v-pn.min)/(pn.max-pn.min),0,1);
+    tctx.fillStyle="#202020";tctx.fillRect(L,top,R-L,bot-top);
+    tctx.fillStyle="rgba(236,236,236,.85)";tctx.font=`bold ${11*d}px system-ui`;tctx.textAlign="left";tctx.fillText(pn.title,L+4*d,top-5*d);
+    tctx.font=`${11*d}px system-ui`;tctx.textAlign="right";
+    const ticks=pn.title==="Tide"?[-1,0,1]:Array.from({length:pn.max+1},(_,i)=>i);
+    for(const v of ticks){tctx.strokeStyle="#2e2e2e";tctx.lineWidth=d;tctx.beginPath();tctx.moveTo(L,y(v));tctx.lineTo(R,y(v));tctx.stroke();tctx.fillStyle="#9a9a9a";tctx.fillText(v+" m",L-6*d,y(v)+3*d)}
+    if(pn.title==="Wave height"){tctx.setLineDash([4*d,4*d]);tctx.strokeStyle="rgba(236,236,236,.55)";tctx.beginPath();tctx.moveTo(L,y(1));tctx.lineTo(R,y(1));tctx.stroke();tctx.setLineDash([]);
+      tctx.fillStyle="rgba(236,236,236,.6)";tctx.textAlign="left";tctx.fillText("1 m",L+4*d,y(1)-3*d)}
+    CAVES.forEach((c,ci)=>{if(pn.once&&ci>0)return;tctx.strokeStyle=pn.once?"#ececec":CCOL[ci];tctx.lineWidth=2*d;tctx.beginPath();
+      pn.get(c).forEach((v,k)=>{const x=xOf(k),yy=y(v);k?tctx.lineTo(x,yy):tctx.moveTo(x,yy)});tctx.stroke()});
+  });
+  const bottom=H-4*d;tctx.fillStyle="#9a9a9a";tctx.font=`${11*d}px system-ui`;tctx.textAlign="left";tctx.strokeStyle="#333";tctx.lineWidth=d;
+  for(let k=0;k<dayEdges.length-1;k++){const x=xOf(dayEdges[k]);tctx.beginPath();tctx.moveTo(x,GAP*d);tctx.lineTo(x,bottom-14*d);tctx.stroke();tctx.fillText(fmtDay.format(at(dayEdges[k]+.5)).replace(",",""),x+3*d,bottom)}
+  tctx.setLineDash([3*d,3*d]);tctx.strokeStyle="rgba(236,236,236,.6)";tctx.beginPath();tctx.moveTo(xOf(NOW),GAP*d);tctx.lineTo(xOf(NOW),bottom-14*d);tctx.stroke();tctx.setLineDash([]);
+  const px=xOf(t);tctx.strokeStyle="#ececec";tctx.lineWidth=1.5*d;tctx.beginPath();tctx.moveTo(px,GAP*d);tctx.lineTo(px,bottom-14*d);tctx.stroke();
+}
+const tlTime=ev=>{const r=tl.getBoundingClientRect();return clamp((ev.clientX-r.left-PADL)/(r.width-PADL-PADR)*NH,0,NH-.01)};
+
+/* ---------- readout ---------- */
+function renderWx(t){
+  const cv=CAVES.map((c,ci)=>({c,ci,hs:hourly(c.hs,t),dir:dirHourly(c.dir,t),sw:hourly(c.sw,t),swd:dirHourly(c.swdir,t)}));
+  const td=hourly(CAVES[0].tide,t),tn=hourly(CAVES[0].tide,Math.min(NH-1,t+.5)),arrow=tn>td+.005?"↑":tn<td-.005?"↓":"";
+  const row=(k,f)=>`<span class="k">${k}</span>${cv.map(f).join("")}`;
+  $("wx").innerHTML=`<span></span>${cv.map(x=>`<span class="v h" style="color:${CCOL[x.ci]}">${x.c.name}</span>`).join("")}<span></span>`
+    +row("Waves",x=>`<span class="v">${x.hs.toFixed(1)} m <small>from ${compass(x.dir)} ${Math.round(x.dir)}°</small></span>`)+`<span></span>`
+    +row("Swell",x=>x.sw>=SW_MIN?`<span class="v">${x.sw.toFixed(1)} m <small>from ${compass(x.swd)}</small></span>`:`<span class="v"><small>weak</small></span>`)+`<span></span>`
+    +`<span class="k">Tide</span><span class="v">${td.toFixed(2)} m ${arrow}</span><span></span><span></span>`;
+}
+
+/* ---------- loop ---------- */
+let T=NOW,playing=false,rate=6,last=performance.now();
+function frame(now){
+  const dt=(now-last)/1000;last=now;
+  if(playing){T+=dt*rate;if(T>=NH-.01)T=0}
+  $("clock").textContent=`${fmtDay.format(at(T)).replace(",","")} ${hhmm(T)}`;
+  renderWx(T);drawMap(T);drawTl(T);requestAnimationFrame(frame);
+}
+$("play").onclick=()=>{playing=!playing;$("play").textContent=playing?"Pause":"Play"};
+$("speed").onchange=e=>{rate=+e.target.value};
+$("today").onclick=()=>{T=NOW};
+let drag=false;
+tl.onpointerdown=e=>{drag=true;tl.setPointerCapture(e.pointerId);T=tlTime(e)};
+tl.onpointermove=e=>{if(drag)T=tlTime(e)};
+tl.onpointerup=()=>{drag=false};
+addEventListener("keydown",e=>{
+  if(e.code==="Space"){e.preventDefault();$("play").click()}
+  else if(e.code==="ArrowRight")T=clamp(T+1,0,NH-.01);
+  else if(e.code==="ArrowLeft")T=clamp(T-1,0,NH-.01)});
+addEventListener("resize",()=>{resizeMap();resizeTl()});
+resizeMap();resizeTl();loadSeals();requestAnimationFrame(frame);
+</script>
+</body>
+</html>

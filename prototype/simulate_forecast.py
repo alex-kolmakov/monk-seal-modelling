@@ -104,6 +104,7 @@ def run_model(first: date, last: date, agents: int, seed: int, say, desertas: bo
         # digest at 70% of the rest rate while swimming (calibrated on EMODnet: calm January 2026 keeps the colony's mass level)
         cmd += ["--feeding-trips", "--feeding-range-km", "90", "--active-digestion", "0.7", "--trip-speed-kmh", "10",
                 "--home-by-hours", "24"]
+    cmd.append("--forage-madeira")  # a day trip reaches Madeira, not the Porto Santo bank
     # sea floor: EMODnet, the one the colony was calibrated on (the run's working directory is not the repo's)
     cmd += ["--emodnet-bathymetry", str(REPO / "data" / "real_long" / "bathymetry_emodnet.nc")]
     say(f"Running the seal model: {agents} seals, {(last - first).days} days")

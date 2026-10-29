@@ -41,6 +41,8 @@ REQUIRES: dict[str, dict[str, Any]] = {
     # the pace only shows in the transit to feeding water, which needs a restricted forage area
     "trip_speed_km_h": {"forage_max_depth_m": 30.0},
     "home_by_hours": {"haulout_box": (32.0, 33.0, -17.5, -16.5)},
+    # the box only limits where a feeding cell is picked, which needs a restricted forage area
+    "forage_box": {"forage_max_depth_m": 30.0},
 }
 
 
@@ -126,6 +128,7 @@ def trajectory(config: SealConfig) -> list[tuple]:
 EXTREME_PERTURBATIONS = {
     "male_annual_risk": [1.0],  # certain death in the first hour
     "forage_exclude_box": [(32.0, 33.0, -17.5, -16.5)],  # around the island: no foraging near home
+    "forage_box": [(32.0, 32.4, -17.5, -17.0)],  # far west of the roost: trips go there
     "forage_max_depth_m": [30.0],  # the middle ring is 75 m deep: foraging there is now off-limits
     "feeding_range_km": [40.0],
     "max_hours_away": [6.0],

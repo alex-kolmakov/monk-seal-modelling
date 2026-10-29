@@ -83,6 +83,11 @@ class SealConfig:
     # has a reason to leave. None = may forage anywhere, as before. Model assumption.
     forage_exclude_box: tuple[float, float, float, float] | None = None
 
+    # (lat_min, lat_max, lon_min, lon_max). When set, feeding cells are picked only inside this
+    # box, so a trip range wide enough for a day trip round Madeira does not also reach a far
+    # shelf such as Porto Santo's. None = anywhere. Model assumption.
+    forage_box: tuple[float, float, float, float] | None = None
+
     # Day-long feeding trips (model assumption). Off: a seal half full at low tide heads for the
     # roost however far away it is, and one that arrives at high tide is woken at once and sent
     # out again, so with a roost 25 km from the feeding grounds it shuttles with the tide,
@@ -167,6 +172,9 @@ SHELF_DEPTH_M = 100.0  # foraging limit that matches the shelf in the intake rat
 # Where seals may not feed: the Desertas and their own shelf (wider than the haul-out box, which
 # hugs the islands)
 DESERTAS_FEED_EXCLUDE_BOX = (32.30, 32.68, -16.66, -16.30)
+# Where seals may feed: the waters of Madeira and the Desertas. Its north edge is 4 km below the
+# first Porto Santo shelf (32.99°N) and 55 km from the Desertas.
+MADEIRA_FORAGE_BOX = (32.20, 32.95, -17.50, -16.00)
 
 # Default configuration for Madeira (oligotrophic environment)
 MADEIRA_CONFIG = SealConfig(

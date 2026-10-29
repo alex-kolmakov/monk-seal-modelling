@@ -498,6 +498,11 @@ class SealAgent:
             box is not None and box[0] <= self.pos[0] <= box[1] and box[2] <= self.pos[1] <= box[3]
         )
 
+    def _outside_forage_box(self, lat, lon) -> bool:
+        """True outside config.forage_box, where no feeding cell is picked (never when None)."""
+        box = self.config.forage_box
+        return box is not None and not (box[0] <= lat <= box[1] and box[2] <= lon <= box[3])
+
     def _find_forage_cell(self, env_buffers, max_radius_km=80.0, num_samples=24):
         """Nearest water where foraging is allowed (not land, within the depth limit, outside the
         exclusion box).
@@ -513,6 +518,8 @@ class SealAgent:
                     math.radians(self.pos[0])
                 )
                 if box is not None and box[0] <= lat <= box[1] and box[2] <= lon <= box[3]:
+                    continue
+                if self._outside_forage_box(lat, lon):
                     continue
                 data = query_env_buffers(lat, lon, _nav(env_buffers))
                 depth = data.get("depth")
@@ -550,6 +557,8 @@ class SealAgent:
                     math.radians(self.pos[0])
                 )
                 if box is not None and box[0] <= lat <= box[1] and box[2] <= lon <= box[3]:
+                    continue
+                if self._outside_forage_box(lat, lon):
                     continue
                 data = query_env_buffers(lat, lon, _nav(env_buffers))
                 depth = data.get("depth")
@@ -1123,6 +1132,46 @@ class SealAgent:
         best_pos = best_c["pos"]
         self.pos = cast(tuple[float, float], best_pos)
         self.heading = float(cast(float, best_c["heading"]))
+        if intention != "LAND":
+            self._snap_to_sea(env_buffers)
+
+    @staticmethod
+    def _is_shore_cell(lat, lon, env_buffers) -> bool:
+        """True where the sea floor map has no depth at this position: land, or a shore cell that
+        the navigation (query_env_buffers) still counts as water because most of its
+        neighbours are sea.
+        """
+        buf = _nav(env_buffers).get("depth")
+        if buf is None:
+            return False
+        rows, cols = buf["shape"]
+        r = int(round((lat - buf["lat_min"]) / buf["lat_step"]))
+        c = int(round((lon - buf["lon_min"]) / buf["lon_step"]))
+        return 0 <= r < rows and 0 <= c < cols and bool(np.isnan(buf["data"][r, c]))
+
+    def _snap_to_sea(self, env_buffers, max_radius_km=3.0):
+        """A swimming seal never ends a move on a shore cell. On a 0.4 km sea floor a coastline
+        cell is a real shore or a thin peninsula, not water as it was on 3 km cells. Step to
+        the nearest sea cell.
+        """
+        if not self._is_shore_cell(self.pos[0], self.pos[1], env_buffers):
+            return
+        rings = 12
+        for ring in range(1, rings + 1):
+            radius_deg = ring / rings * max_radius_km / 111.0
+            n = 8 * ring
+            for i in range(n):
+                angle = i / n * 2 * math.pi
+                lat = self.pos[0] + radius_deg * math.sin(angle)
+                lon = self.pos[1] + radius_deg * math.cos(angle) / math.cos(
+                    math.radians(self.pos[0])
+                )
+                if self._is_shore_cell(lat, lon, env_buffers):
+                    continue
+                if self._path_intersects_land(self.pos, (lat, lon), env_buffers, steps=4):
+                    continue
+                self.pos = (lat, lon)
+                return
 
     def forage(self, env_data, env_buffers):
         # Land escape takes absolute priority — bathymetric depth looks shallow near
@@ -1343,6 +1392,7 @@ class SealAgent:
         elif (
             self.config.forage_max_depth_m is not None
             or self.config.forage_exclude_box is not None
+            or self.config.forage_box is not None
         ):
             # Foraging is restricted: transit heads for the nearest water where it is allowed
             self._move_to_forage_area(env_buffers)

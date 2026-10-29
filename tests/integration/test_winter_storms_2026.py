@@ -25,6 +25,7 @@ from src.simulation.agents.config import (
     DESERTAS_FEED_EXCLUDE_BOX,
     DESERTAS_HAULOUT_BOX,
     MADEIRA_CONFIG,
+    MADEIRA_FORAGE_BOX,
     SHELF_DEPTH_M,
 )
 from src.simulation.run_real_long import run_long_simulation
@@ -57,7 +58,8 @@ COLONY = replace(
 # On EMODnet the colony makes same-day trips around Madeira: swims 10 km/h, feeds up to 90 km out
 # and is back in the roost 24 h after leaving it (home_by_hours counts the swim back). That
 # leaves less time to feed, so digestion while swimming is 0.7 (calm control -0.8 kg in 14 days,
-# 2026-10-29, three seeds of 12 seals; 0.5 gives -1.9 kg).
+# 2026-10-29, three seeds of 12 seals; 0.5 gives -1.9 kg). The 90 km range would also reach
+# Porto Santo's shelf, so seals feed only in Madeira's waters (calm control +0.8 to +1.8 kg).
 COLONY_EMODNET = replace(
     COLONY,
     active_digestion_fraction=0.7,
@@ -65,6 +67,7 @@ COLONY_EMODNET = replace(
     trip_speed_km_h=10.0,
     max_hours_away=None,
     home_by_hours=24.0,
+    forage_box=MADEIRA_FORAGE_BOX,
 )
 AGENTS, SEED = 12, 42
 

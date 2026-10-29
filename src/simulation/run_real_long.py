@@ -9,6 +9,7 @@ from src.simulation.agents.config import (
     DESERTAS_FEED_EXCLUDE_BOX,
     DESERTAS_HAULOUT_BOX,
     MADEIRA_CONFIG,
+    MADEIRA_FORAGE_BOX,
     SHELF_DEPTH_M,
 )
 from src.simulation.environment.environment import TIDE_DATUM_M
@@ -165,6 +166,11 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--forage-madeira",
+        action="store_true",
+        help="Seals feed only in the waters of Madeira and the Desertas (config.forage_box)",
+    )
+    parser.add_argument(
         "--feeding-trips",
         action="store_true",
         help=(
@@ -240,6 +246,7 @@ if __name__ == "__main__":
         haulout_box=DESERTAS_HAULOUT_BOX if args.haulout_desertas else None,
         forage_max_depth_m=SHELF_DEPTH_M if args.forage_shelf else None,
         forage_exclude_box=DESERTAS_FEED_EXCLUDE_BOX if args.no_forage_at_desertas else None,
+        forage_box=MADEIRA_FORAGE_BOX if args.forage_madeira else None,
         feeding_trips=args.feeding_trips,
         max_hours_away=args.max_hours_away,
         active_digestion_fraction=args.active_digestion,
