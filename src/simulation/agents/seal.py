@@ -10,6 +10,9 @@ from src.simulation.agents.config import MADEIRA_CONFIG, SealConfig
 from src.simulation.agents.movement import correlated_random_walk
 from src.simulation.environment.utils import query_env_buffers
 
+KM_PER_DEG = 111.0
+DEFAULT_SPEED_DEG_H = 0.05  # _move_smart's pace per hourly step, about 5.5 km/h
+
 
 class SealState(Enum):
     FORAGING = "FORAGING"
@@ -94,6 +97,10 @@ class SealAgent:
             self.state = SealState.RESTING  # Pups start resting/sleeping
 
         self.memory = SealMemory()
+        # feeding_range_km: where this trip is heading
+        self.trip_target: tuple[float, float] | None = None
+        self.trip_hours = 0  # hours spent heading for it
+        self.hours_away = 0  # max_hours_away: hours since the seal was last in the roost box
 
         self.age_in_hours = 0
         self.state_duration = 0  # Track how long we've been in current state
@@ -172,6 +179,7 @@ class SealAgent:
                 self.death_cause = "male_risk"
                 return
 
+        self.hours_away = 0 if self._in_haulout_box() else self.hours_away + 1
         self.burn_energy()
         self._mobilise_mass()
         if self.energy <= self.max_energy * self.config.starvation_threshold:
@@ -181,6 +189,12 @@ class SealAgent:
             return
 
         self.decide_activity(env_data, is_land)
+        if self.state == SealState.FORAGING and (
+            (not is_land and self._depth_too_deep(env_data.get("depth")))
+            or self._in_forage_exclusion()
+        ):
+            # foraging only on the shelf and outside the exclusion box: go to it
+            self.state = SealState.TRANSITING
         # A haul-out decided this step (e.g. RESTING at low tide) must also respect the
         # swell, or the haul-out action lands the seal past the storm check above.
         if (
@@ -189,6 +203,9 @@ class SealAgent:
             and self.config.storm_blocks_landing
         ):
             self.state = SealState.TRANSITING
+        if self.state != SealState.TRANSITING:
+            # the trip is over (arrived and feeding, or heading home)
+            self.trip_target, self.trip_hours = None, 0
         if self.state != old_state:
             self.state_duration = 0
             self.log(
@@ -204,7 +221,15 @@ class SealAgent:
         # Execute Action
         # Pass env_buffers to actions so they can query other locations
         if self.state == SealState.FORAGING:
+            before, stomach_before = self.pos, self.stomach_load
             self.forage(env_data, env_buffers)
+            if self._too_deep_to_forage(self.pos, env_buffers) or self._in_forage_exclusion():
+                # foraging never leaves the shelf or enters the exclusion box: the move is undone,
+                # and so is the food eaten at the refused spot (deep water: none), so the seal eats
+                # where it stays instead
+                self.pos, self.stomach_load = before, stomach_before
+                depth = query_env_buffers(before[0], before[1], _nav(env_buffers)).get("depth")
+                self._eat_here(env_buffers, 9999 if depth is None else depth)
 
         elif self.state == SealState.RESTING:
             self.rest(env_data, env_buffers)
@@ -220,6 +245,14 @@ class SealAgent:
 
         elif self.state == SealState.RECOVERY:
             self.recovery(env_data, env_buffers)
+
+        if self.config.active_digestion_fraction and self.state in (
+            SealState.FORAGING,
+            SealState.TRANSITING,
+            SealState.HAULING_OUT,
+        ):
+            # digesting on the move
+            self._digest(self.config.digestion_rate * self.config.active_digestion_fraction)
 
     # Legacy update (wraps buffers call if needed, but we should use update_with_buffers mainly)
     def update(self, env_data, environment=None):
@@ -245,7 +278,13 @@ class SealAgent:
                 self.log(f"HIGH TIDE ({tide:.2f} > {high_tide_threshold}): Evacuating land!")
                 self.state = SealState.TRANSITING  # Will seek water
                 return
+            elif self._heading_home():
+                return  # still on its way to the roost: high tide does not turn it back to feeding
             elif self.state in [SealState.HAULING_OUT, SealState.RESTING, SealState.SLEEPING]:
+                if self._digests_at_roost():
+                    # caves flooded, but it can digest afloat at the roost
+                    self.state = SealState.RESTING
+                    return
                 # In water but trying to rest/haulout - Force filter
                 # Cannot Haulout at High Tide (Caves flooded)
                 self.log(f"HIGH TIDE ({tide:.2f}): Forcing Foraging (Caves flooded)")
@@ -257,11 +296,11 @@ class SealAgent:
         # 1. HAULING OUT PROCESS
         if self.state == SealState.HAULING_OUT:
             # Abort if tide gets too high
-            if tide > high_tide_threshold and not is_land:
+            if tide > high_tide_threshold and not is_land and not self._heading_home():
                 self.state = SealState.FORAGING
                 return
 
-            if is_land:
+            if is_land and self._in_haulout_box():
                 # Successfully reached land!
                 self.state = SealState.SLEEPING
                 self.haulout_failures = 0  # Reset failure counter
@@ -279,12 +318,15 @@ class SealAgent:
 
         # 2. SLEEPING (On Land)
         if self.state == SealState.SLEEPING:
+            if not self._in_haulout_box():
+                self.state = SealState.HAULING_OUT  # may only sleep inside the haul-out box
+                return
             if not is_land:
                 # Bottling (Sleeping in water)
                 # If tide is low, we should try to Haul Out properly
                 if tide < low_tide_threshold:
-                     self.state = SealState.HAULING_OUT
-                     return
+                    self.state = SealState.HAULING_OUT
+                    return
 
                 # Wake up check for bottling seal
                 if self.stomach_load == 0:
@@ -298,18 +340,21 @@ class SealAgent:
 
             # On Land
             if tide > high_tide_threshold:
-                 # Forced to wake up by tide
-                 self.state = SealState.FORAGING
-                 return
+                # Forced to wake up by tide
+                self.state = SealState.FORAGING
+                return
 
             # Wake up if hungry
             wake_level = self.max_energy * self.config.wake_energy_fraction
             if self.stomach_load == 0 and self.energy < wake_level:
-                 self.state = SealState.FORAGING
+                self.state = SealState.FORAGING
             return
 
         # 3. RESTING (In Water)
         if self.state == SealState.RESTING:
+            if not self._in_haulout_box():
+                self.state = SealState.HAULING_OUT  # may only rest inside the haul-out box
+                return
             # If Tide is Low -> Opportunity to Haul Out
             if tide < low_tide_threshold:
                 # Prefer Hauling Out over floating rest
@@ -329,7 +374,7 @@ class SealAgent:
                 and self.stomach_load < 0.1
             )
             if is_desperate:
-                return # Keep eating
+                return  # Keep eating
 
             # Recovery: critically low energy but has food in stomach → stop and digest
             is_critical = self.energy < self.max_energy * self.config.critical_energy_threshold
@@ -341,21 +386,29 @@ class SealAgent:
             is_tired = self.energy < self.max_energy * self.config.tired_energy_fraction
             is_full = self.stomach_load > self.stomach_capacity * self.config.full_stomach_fraction
 
+            if self._away_too_long():
+                self.state = SealState.HAULING_OUT  # the day trip is over: head for the roost
+                return
+
             if is_full or is_tired:
                 # seek rest
                 # Check Tide for decision
-                if tide < low_tide_threshold:
+                if tide < low_tide_threshold or not self._in_haulout_box():
                     self.state = SealState.HAULING_OUT
                 else:
-                    self.state = SealState.RESTING # Rest in water until tide drops
+                    self.state = SealState.RESTING  # Rest in water until tide drops
                 return
 
             # Low Tide Opportunity: Maybe haul out if semi-full?
             # (Optional: Seals like to sleep at low tide even if not 100% full)
             semi_full = self.stomach_capacity * self.config.low_tide_haulout_stomach_fraction
-            if tide < low_tide_threshold and self.stomach_load > semi_full:
-                 self.state = SealState.HAULING_OUT
-                 return
+            if (
+                tide < low_tide_threshold
+                and self.stomach_load > semi_full
+                and not self.config.feeding_trips
+            ):
+                self.state = SealState.HAULING_OUT
+                return
 
         # 5. RECOVERY
         if self.state == SealState.RECOVERY:
@@ -376,11 +429,183 @@ class SealAgent:
         if self.state == SealState.TRANSITING:
             # If we were transiting to escape land (Tide Panic), check if we are safe
             if not is_land:
+                if self._digests_at_roost():
+                    # arrived at the roost with food: digest afloat, do not turn back out
+                    self.state = SealState.RESTING
+                    return
+                if self._depth_too_deep(env_data.get("depth")) or self._in_forage_exclusion():
+                    # still off the shelf, or still where it may not feed: keep heading for feeding
+                    # water
+                    return
                 self.log("TRANSITING -> FORAGING: Safe in water (Escaped land/Tide Panic ended)")
                 self.state = SealState.FORAGING
                 return
             # Else: We are still on land, so we must keep TRANSITING (Panic Move)
             return
+
+    def _in_haulout_box(self) -> bool:
+        """True where resting, sleeping and hauling out are allowed (anywhere unless
+        config.haulout_box is set).
+        """
+        box = self.config.haulout_box
+        if box is None:
+            return True
+        return box[0] <= self.pos[0] <= box[1] and box[2] <= self.pos[1] <= box[3]
+
+    def _heading_home(self) -> bool:
+        """feeding_trips: a seal hauling out from outside the roost box is on its way home."""
+        return (
+            self.config.feeding_trips
+            and self.state == SealState.HAULING_OUT
+            and not self._in_haulout_box()
+        )
+
+    def _away_too_long(self) -> bool:
+        if self.config.haulout_box is None:
+            return False
+        limit = self.config.max_hours_away
+        if limit is not None and self.hours_away >= limit:
+            return True
+        home_by = self.config.home_by_hours
+        if home_by is None:
+            return False
+        box = self.config.haulout_box
+        roost = ((box[0] + box[1]) / 2, (box[2] + box[3]) / 2)
+        swim_back_h = self._calculate_distance_km(self.pos, roost) / self._trip_speed_km_h()
+        return self.hours_away + swim_back_h >= home_by
+
+    def _trip_speed_km_h(self) -> float:
+        """Swimming pace for travel to feeding water and back to the roost (km/h)."""
+        speed = self.config.trip_speed_km_h
+        return DEFAULT_SPEED_DEG_H * KM_PER_DEG if speed is None else speed
+
+    def _trip_speed_deg(self) -> float:
+        """The same pace as the degrees-per-step `_move_smart` takes."""
+        return self._trip_speed_km_h() / KM_PER_DEG
+
+    def _digests_at_roost(self) -> bool:
+        """feeding_trips: a seal in the roost box with food in its stomach rests there (it may not
+        be sent out again).
+        """
+        return self.config.feeding_trips and self.stomach_load > 0 and self._in_haulout_box()
+
+    def _in_forage_exclusion(self) -> bool:
+        """True inside config.forage_exclude_box, where seals may not forage (never when it is
+        None).
+        """
+        box = self.config.forage_exclude_box
+        return (
+            box is not None and box[0] <= self.pos[0] <= box[1] and box[2] <= self.pos[1] <= box[3]
+        )
+
+    def _find_forage_cell(self, env_buffers, max_radius_km=80.0, num_samples=24):
+        """Nearest water where foraging is allowed (not land, within the depth limit, outside the
+        exclusion box).
+        """
+        max_radius_deg, num_circles = max_radius_km / 111.0, 20
+        box, limit = self.config.forage_exclude_box, self.config.forage_max_depth_m
+        for circle_idx in range(1, num_circles + 1):
+            radius_deg = (circle_idx / num_circles) * max_radius_deg
+            for i in range(num_samples):
+                angle = (i / num_samples) * 2 * math.pi
+                lat = self.pos[0] + radius_deg * math.cos(angle)
+                lon = self.pos[1] + radius_deg * math.sin(angle) / math.cos(
+                    math.radians(self.pos[0])
+                )
+                if box is not None and box[0] <= lat <= box[1] and box[2] <= lon <= box[3]:
+                    continue
+                data = query_env_buffers(lat, lon, _nav(env_buffers))
+                depth = data.get("depth")
+                if (
+                    data.get("is_land", False)
+                    or depth is None
+                    or (limit is not None and depth > limit)
+                ):
+                    continue
+                # A cell across an island is no target: every straight move towards it is refused
+                # and the seal oscillates or freezes on the far coast. Take the nearest cell
+                # reachable over open water.
+                steps = max(10, int(radius_deg * 111.0 / 1.5))
+                if self._path_intersects_land(self.pos, (lat, lon), env_buffers, steps=steps):
+                    continue
+                return (lat, lon), radius_deg * 111.0
+        return None, None
+
+    def _pick_trip_target(self, env_buffers):
+        """A random allowed feeding cell within feeding_range_km over open water (uniform over the
+        area), or None.
+        """
+        range_km = self.config.feeding_range_km
+        if range_km is None:
+            return None
+        box, limit = self.config.forage_exclude_box, self.config.forage_max_depth_m
+        found = []
+        for ring in range(1, 21):
+            radius_deg = ring / 20 * range_km / 111.0
+            n = 6 * ring  # samples grow with the circle, so cells are drawn evenly over the area
+            for i in range(n):
+                angle = i / n * 2 * math.pi
+                lat = self.pos[0] + radius_deg * math.cos(angle)
+                lon = self.pos[1] + radius_deg * math.sin(angle) / math.cos(
+                    math.radians(self.pos[0])
+                )
+                if box is not None and box[0] <= lat <= box[1] and box[2] <= lon <= box[3]:
+                    continue
+                data = query_env_buffers(lat, lon, _nav(env_buffers))
+                depth = data.get("depth")
+                if (
+                    data.get("is_land", False)
+                    or depth is None
+                    or (limit is not None and depth > limit)
+                ):
+                    continue
+                found.append((lat, lon, radius_deg * 111.0))
+        self.rng.shuffle(found)  # try them in random order; the first with a clear sea route wins
+        for lat, lon, km in found[:40]:
+            if not self._path_intersects_land(
+                self.pos, (lat, lon), env_buffers, steps=max(10, int(km / 1.5))
+            ):
+                return (lat, lon)
+        return None
+
+    def _move_to_forage_area(self, env_buffers):
+        """Head for feeding water: straight over open water for a long leg, hugging the shelf on the
+        last stretch.
+        """
+        if self.config.feeding_range_km is not None:
+            self.trip_hours += 1
+            # a target that took over 14 h is not reachable: pick again
+            if self.trip_target is None or self.trip_hours > 14:
+                self.trip_target, self.trip_hours = self._pick_trip_target(env_buffers), 0
+            if self.trip_target is not None:
+                dist = self._calculate_distance_km(self.pos, self.trip_target)
+                self._move_smart(
+                    env_buffers,
+                    intention="WATER" if dist > 3.0 else "SHELF",
+                    target_pos=self.trip_target,
+                    speed=self._trip_speed_deg(),
+                )
+                return
+        target, dist_km = self._find_forage_cell(env_buffers)
+        if target is None:
+            target = self._get_shelf_target(env_buffers)
+        far = dist_km is not None and dist_km > 3.0
+        self._move_smart(
+            env_buffers,
+            intention="WATER" if far else "SHELF",
+            target_pos=target,
+            speed=self._trip_speed_deg(),
+        )
+
+    def _depth_too_deep(self, depth) -> bool:
+        """True when config.forage_max_depth_m is set and this depth is deeper (or unknown)."""
+        limit = self.config.forage_max_depth_m
+        return limit is not None and (depth is None or depth > limit)
+
+    def _too_deep_to_forage(self, pos, env_buffers) -> bool:
+        return self._depth_too_deep(
+            query_env_buffers(pos[0], pos[1], _nav(env_buffers)).get("depth")
+        )
 
     def _get_home_bias(self):
         # Return vector to home (first haulout site)
@@ -1054,6 +1279,10 @@ class SealAgent:
                 depth = 9999
 
         # 3. Calculate Intake
+        self._eat_here(env_buffers, depth)
+
+    def _eat_here(self, env_buffers, depth):
+        """Intake at the current position for one hour (stomach, patch memory). Not on land."""
         # CRITICAL: Check if we're actually on land (even with inferred depth)
         # Seals cannot eat on land!
         final_check = query_env_buffers(
@@ -1111,6 +1340,12 @@ class SealAgent:
                 # No water found - try random
                 self.log("WARNING: No water found nearby in TRANSIT, trying random escape")
                 self._move_smart(env_buffers, intention="WATER", target_pos=None)
+        elif (
+            self.config.forage_max_depth_m is not None
+            or self.config.forage_exclude_box is not None
+        ):
+            # Foraging is restricted: transit heads for the nearest water where it is allowed
+            self._move_to_forage_area(env_buffers)
         else:
             # We are in water, just transit normally
             self._move_smart(env_buffers, intention="WATER", target_pos=None)
@@ -1118,6 +1353,16 @@ class SealAgent:
     def haul_out_search(self, env_buffers):
         """Search for and navigate to land for hauling out."""
         target = None
+
+        box = self.config.haulout_box
+        if box is not None and not self._in_haulout_box():
+            # Outside the haul-out box: head for its centre over open water, search for land once
+            # inside
+            centre = ((box[0] + box[1]) / 2, (box[2] + box[3]) / 2)
+            self._move_smart(
+                env_buffers, intention="WATER", target_pos=centre, speed=self._trip_speed_deg()
+            )
+            return
 
         # Use smart land-finding to locate nearest land
         land_pos, land_dist = self._find_nearest_land(env_buffers, max_radius_km=15.0)

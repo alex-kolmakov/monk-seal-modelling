@@ -29,11 +29,18 @@ NOT_YET_WIRED: dict[str, str] = {}
 
 # Fields that only act behind a toggle: perturb them with the toggle on, against a
 # baseline that has it on too.
-REQUIRES = {
+REQUIRES: dict[str, dict[str, Any]] = {
     "mass": {"mass_dynamics": True},
     "tissue_energy_density": {"mass_dynamics": True},
     "lean_mass": {"mass_dynamics": True},
     "max_mass": {"mass_dynamics": True},
+    # only acts with a roost box; the box is the island's own waters
+    "max_hours_away": {"haulout_box": (32.0, 33.0, -17.5, -16.5)},
+    # transit only picks a feeding cell when foraging is restricted
+    "feeding_range_km": {"forage_max_depth_m": 30.0},
+    # the pace only shows in the transit to feeding water, which needs a restricted forage area
+    "trip_speed_km_h": {"forage_max_depth_m": 30.0},
+    "home_by_hours": {"haulout_box": (32.0, 33.0, -17.5, -16.5)},
 }
 
 
@@ -118,6 +125,14 @@ def trajectory(config: SealConfig) -> list[tuple]:
 # Rare-event fields: ±30% almost never changes a 300 h run, so push them to the extreme.
 EXTREME_PERTURBATIONS = {
     "male_annual_risk": [1.0],  # certain death in the first hour
+    "forage_exclude_box": [(32.0, 33.0, -17.5, -16.5)],  # around the island: no foraging near home
+    "forage_max_depth_m": [30.0],  # the middle ring is 75 m deep: foraging there is now off-limits
+    "feeding_range_km": [40.0],
+    "max_hours_away": [6.0],
+    "trip_speed_km_h": [12.0],
+    "home_by_hours": [6.0],
+    # a box away from the island: nobody may rest at home
+    "haulout_box": [(33.5, 33.9, -17.9, -17.5)],
 }
 
 

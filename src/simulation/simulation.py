@@ -65,15 +65,19 @@ class Simulation:
             f"Simulation Initialized: {self.start_time} to {self.end_time} (Step: {self.time_step})"
         )
 
-    def load_environment(self, nc_files: list[str]):
-        """Load environmental data from NetCDF files."""
+    def load_environment(self, nc_files: list[str], bathymetry_file: str | None = None):
+        """Load environmental data from NetCDF files.
+
+        bathymetry_file: EMODnet bathymetry NetCDF to use instead of the depth map derived
+        from the physics file (see Environment.load_data).
+        """
         if not nc_files:
             logger.warning(
                 "No environment files provided. Agents will run in 'void' mode (defaults)."
             )
             return
 
-        self.environment.load_data(nc_files)
+        self.environment.load_data(nc_files, bathymetry_file=bathymetry_file)
 
     def _sample_valid_spawn_positions(self) -> list[tuple[float, float]]:
         """Return shallow-water cells (depth 20–150 m) from the bathymetry map.

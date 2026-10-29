@@ -2,8 +2,15 @@ import argparse
 import json
 import logging
 import os
+from dataclasses import replace
 from datetime import datetime
 
+from src.simulation.agents.config import (
+    DESERTAS_FEED_EXCLUDE_BOX,
+    DESERTAS_HAULOUT_BOX,
+    MADEIRA_CONFIG,
+    SHELF_DEPTH_M,
+)
 from src.simulation.environment.environment import TIDE_DATUM_M
 from src.simulation.simulation import Simulation
 
@@ -30,6 +37,7 @@ def run_long_simulation(
     synthetic_tide: bool = False,
     overwrite: bool = False,
     allow_time_wrap: bool = False,
+    bathymetry_file: str | None = None,
 ):
     """Run a monk seal simulation for the given date range.
 
@@ -45,6 +53,8 @@ def run_long_simulation(
         config:        SealConfig instance (None = use MADEIRA_CONFIG defaults).
         synthetic_tide: Use the synthetic sine tide instead of ssh_{tag}.nc (IBI zos).
         overwrite:     Replace an existing output CSV instead of refusing to run.
+        bathymetry_file: EMODnet bathymetry NetCDF (download_bathymetry) used as the sea floor
+                       instead of the depth derived from physics_{tag}.nc.
     """
     print(
         f"--- Monk Seal Simulation  start={start_time}"
@@ -69,7 +79,10 @@ def run_long_simulation(
         nc_files.append(tide_file)
         print(f"Tide: {tide_file}")
 
-    missing = [f for f in nc_files if not os.path.exists(f)]
+    if bathymetry_file is not None:
+        print(f"Bathymetry: {bathymetry_file}")
+    missing = [f for f in nc_files + ([bathymetry_file] if bathymetry_file else [])
+               if not os.path.exists(f)]
     if missing:
         raise FileNotFoundError(f"Missing data files: {missing}")
 
@@ -86,7 +99,7 @@ def run_long_simulation(
     print(f"Random seed: {sim.seed}")
 
     print("Loading Environment...")
-    sim.load_environment(nc_files)
+    sim.load_environment(nc_files, bathymetry_file=bathymetry_file)
     meta = dict(
         start_time=start_time,
         duration_days=duration_days,
@@ -98,6 +111,7 @@ def run_long_simulation(
         tide_datum_m=TIDE_DATUM_M,
         allow_time_wrap=allow_time_wrap,
         nc_files=nc_files,
+        bathymetry_file=bathymetry_file,
     )
     _write_run_metadata(output_csv, **meta)
 
@@ -119,25 +133,120 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--from",    dest="date_from", required=True,
                         help="Start date DD-MM-YYYY")
-    parser.add_argument("--to",      dest="date_to",   required=True,
-                        help="End date DD-MM-YYYY")
-    parser.add_argument("--out",     type=str, default="long_sim_results.csv")
-    parser.add_argument("--seed",    type=int, default=None)
-    parser.add_argument("--agents",  type=int, default=1)
+    parser.add_argument("--to", dest="date_to", required=True, help="End date DD-MM-YYYY")
+    parser.add_argument("--out", type=str, default="long_sim_results.csv")
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--agents", type=int, default=1)
     parser.add_argument("--workers", type=int, default=None)
-    parser.add_argument("--synthetic-tide", action="store_true",
-                        help="Use a 12.4 h sine tide instead of ssh_{tag}.nc (IBI zos)")
-    parser.add_argument("--overwrite", action="store_true",
-                        help="Replace an existing output CSV (default: refuse)")
-    parser.add_argument("--allow-time-wrap", action="store_true",
-                        help="Replay input data from its start past its end (default: error)")
+    parser.add_argument(
+        "--synthetic-tide",
+        action="store_true",
+        help="Use a 12.4 h sine tide instead of ssh_{tag}.nc (IBI zos)",
+    )
+    parser.add_argument(
+        "--overwrite", action="store_true", help="Replace an existing output CSV (default: refuse)"
+    )
+    parser.add_argument(
+        "--haulout-desertas",
+        action="store_true",
+        help="Seals rest, sleep and haul out only on the Desertas (config.haulout_box)",
+    )
+    parser.add_argument(
+        "--forage-shelf",
+        action="store_true",
+        help="Seals forage only on the shelf, sea at most 100 m deep (config.forage_max_depth_m)",
+    )
+    parser.add_argument(
+        "--no-forage-at-desertas",
+        action="store_true",
+        help=(
+            "Seals do not forage inside the Desertas box: they leave to "
+            "feed and come back to rest"
+        ),
+    )
+    parser.add_argument(
+        "--feeding-trips",
+        action="store_true",
+        help=(
+            "Seals stay out feeding until full, and digest afloat at the "
+            "roost (config.feeding_trips)"
+        ),
+    )
+    parser.add_argument(
+        "--feeding-range-km",
+        type=float,
+        default=None,
+        help="Each trip feeds at a random shelf cell within this many km (config.feeding_range_km)",
+    )
+    parser.add_argument(
+        "--active-digestion",
+        type=float,
+        default=0.0,
+        help=(
+            "Digest at this fraction of the rest rate while swimming "
+            "(config.active_digestion_fraction)"
+        ),
+    )
+    parser.add_argument(
+        "--max-hours-away",
+        type=float,
+        default=None,
+        help=(
+            "A feeding seal heads for the roost after this many hours "
+            "away (config.max_hours_away)"
+        ),
+    )
+    parser.add_argument(
+        "--trip-speed-kmh",
+        type=float,
+        default=None,
+        help="Swimming pace to feeding water and back to the roost (config.trip_speed_km_h)",
+    )
+    parser.add_argument(
+        "--home-by-hours",
+        type=float,
+        default=None,
+        help=(
+            "Be back in the roost box this many hours after leaving it, counting the swim back "
+            "(config.home_by_hours)"
+        ),
+    )
+    parser.add_argument(
+        "--allow-time-wrap",
+        action="store_true",
+        help="Replay input data from its start past its end (default: error)",
+    )
+    parser.add_argument(
+        "--emodnet-bathymetry",
+        nargs="?",
+        const="data/real_long/bathymetry_emodnet.nc",
+        default=None,
+        metavar="FILE",
+        help=(
+            "Use EMODnet bathymetry as the sea floor instead of the depth derived from the "
+            "physics file (default file: data/real_long/bathymetry_emodnet.nc, made by "
+            "src.data_ingestion.download_bathymetry)"
+        ),
+    )
     args = parser.parse_args()
 
     dt_from = datetime.strptime(args.date_from, "%d-%m-%Y")
-    dt_to   = datetime.strptime(args.date_to,   "%d-%m-%Y")
-    tag     = f"{dt_from:%Y%m%d}_{dt_to:%Y%m%d}"
-    days    = (dt_to - dt_from).days
+    dt_to = datetime.strptime(args.date_to, "%d-%m-%Y")
+    tag = f"{dt_from:%Y%m%d}_{dt_to:%Y%m%d}"
+    days = (dt_to - dt_from).days
 
+    config = replace(
+        MADEIRA_CONFIG,
+        haulout_box=DESERTAS_HAULOUT_BOX if args.haulout_desertas else None,
+        forage_max_depth_m=SHELF_DEPTH_M if args.forage_shelf else None,
+        forage_exclude_box=DESERTAS_FEED_EXCLUDE_BOX if args.no_forage_at_desertas else None,
+        feeding_trips=args.feeding_trips,
+        max_hours_away=args.max_hours_away,
+        active_digestion_fraction=args.active_digestion,
+        feeding_range_km=args.feeding_range_km,
+        trip_speed_km_h=args.trip_speed_kmh,
+        home_by_hours=args.home_by_hours,
+    )
     run_long_simulation(
         start_time=dt_from.strftime("%Y-%m-%d %H:%M"),
         duration_days=days,
@@ -149,4 +258,6 @@ if __name__ == "__main__":
         synthetic_tide=args.synthetic_tide,
         overwrite=args.overwrite,
         allow_time_wrap=args.allow_time_wrap,
+        config=config,
+        bathymetry_file=args.emodnet_bathymetry,
     )

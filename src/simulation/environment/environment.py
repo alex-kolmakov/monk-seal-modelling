@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from .bathymetry import load_emodnet_bathymetry
 from .utils import navigation_grids, query_env_buffers
 
 # Configure sorting
@@ -114,8 +115,15 @@ class Environment:
             return f"ibi_{TIDE_VARIABLE}"
         return "synthetic_sine" if self.synthetic_tide else "none"
 
-    def load_data(self, file_paths: list[str]):
-        """Load multiple NetCDF files."""
+    def load_data(self, file_paths: list[str], bathymetry_file: str | None = None):
+        """Load multiple NetCDF files.
+
+        Args:
+            file_paths: Copernicus NetCDF files (physics, currents, waves, bgc, ssh).
+            bathymetry_file: EMODnet bathymetry NetCDF (see download_bathymetry). When set, it
+                replaces the depth map derived from the physics file as the sea floor the
+                seals navigate and forage on; the physics still comes from the Copernicus grid.
+        """
         logger.info(f"Loading environment data from {len(file_paths)} files...")
         self.datasets = []
         self.bathymetry_map = None
@@ -176,7 +184,30 @@ class Environment:
             except Exception as e:
                 raise EnvironmentDataError(f"Failed to load {fp}: {e}") from e
 
+        if bathymetry_file is not None:
+            self._use_bathymetry_file(bathymetry_file)
         self._build_fields()
+
+    def _use_bathymetry_file(self, path: str):
+        """Replace the bathymetry map with the one in `path`; it must cover the loaded grids."""
+        try:
+            bathymetry = load_emodnet_bathymetry(path)
+        except (OSError, ValueError) as e:
+            raise EnvironmentDataError(f"Cannot read bathymetry {path}: {e}") from e
+        step_lat = float(np.diff(bathymetry.lat.values).mean())
+        step_lon = float(np.diff(bathymetry.lon.values).mean())
+        for ds in self.datasets:
+            for dim, step, name in (("lat", step_lat, "latitude"), ("lon", step_lon, "longitude")):
+                lo, hi = float(ds[dim].min()), float(ds[dim].max())
+                have_lo, have_hi = float(bathymetry[dim].min()), float(bathymetry[dim].max())
+                if lo < have_lo - step or hi > have_hi + step:
+                    raise EnvironmentDataError(
+                        f"Bathymetry {path} covers {name} {have_lo:.2f}..{have_hi:.2f}, "
+                        f"the environment needs {lo:.2f}..{hi:.2f}"
+                    )
+        self.bathymetry_map = bathymetry
+        rows, cols = bathymetry.sizes["lat"], bathymetry.sizes["lon"]
+        logger.info(f"Bathymetry replaced by {path} ({rows}x{cols})")
 
     def _build_fields(self):
         """Extract each buffered variable once as numpy (time first) with its time index,
