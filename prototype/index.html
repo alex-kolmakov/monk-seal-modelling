@@ -431,8 +431,8 @@ function buildOverlay(){
 function sizeCanvas(cv,hCss){const dpr=Math.min(window.devicePixelRatio||1,2);const w=cv.clientWidth;cv.width=Math.round(w*dpr);cv.height=Math.round(hCss*dpr);cv.style.height=hCss+"px";return dpr}
 let mdpr=1;
 function resizeMap(){
-  const box=$("mapslot"),bw=box.clientWidth,mobile=matchMedia("(max-width:820px),(max-height:500px)").matches,
-    bh=mobile?bw/ASPECT:box.clientHeight;  // stacked on a phone: the map's height follows its width
+  const box=$("mapslot"),bw=box.clientWidth,mobile=mq.matches,
+    bh=mobile?Math.min(bw/ASPECT,Math.max(180,innerHeight-130)):box.clientHeight;  // phone: height follows width, but never taller than the screen  // stacked on a phone: the map's height follows its width
   if(!bw||!bh)return;
   const w=Math.floor(Math.min(bw,bh*ASPECT)),h=Math.floor(w/ASPECT);
   const dpr=Math.min(window.devicePixelRatio||1,2);mdpr=dpr;
@@ -512,14 +512,17 @@ function drawMap(t){
 
 /* ---------- timeline: one lane per cave (cave state + green windows), then waves and tide ---------- */
 const tl=$("tl"), tctx=tl.getContext("2d"); let tdpr=1;
-const PADL=84,PADR=8,PADT=4,LANE=17,PH=42,PGAP=13;
+let PADL=84,PADR=8,PADT=4,LANE=17,PH=42,PGAP=13,AXB=0,TLH=0;
 const HAS_SW=!!REP.has_swell;
 const PANELS=[
   {key:"hs",title:"Wave height",unit:"m",max:5,ticks:[0,1,2,3,4,5],ok:true},
   {key:"sw",title:"Swell height",unit:"m",max:5,ticks:[0,1,2,3,4,5],ok:HAS_SW,need:"swell (VHM0_SW1)"},
   {key:"tide",title:"Tide",unit:"m",min:-1.5,max:1.5,ticks:[-1,0,1],ok:true}
 ];
-const TLH=PADT+NC*(LANE+4)+PANELS.length*(PH+PGAP)+10;
+function applyTlScale(){readUI();const mob=mq.matches;
+  PADL=mob?38:Math.round(84*UI);LANE=mob?26:Math.round(17*UI);PH=mob?84:Math.round(42*UI);PGAP=mob?28:Math.round(15*UI);AXB=mob?18:0;
+  TLH=PADT+NC*(LANE+4)+PANELS.length*(PH+PGAP)+10+AXB}
+applyTlScale();
 const COMPASS={0:"N",90:"E",180:"S",270:"W",360:"N"};
 function resizeTl(){tdpr=sizeCanvas(tl,TLH)}
 let _fp=null;
@@ -528,56 +531,74 @@ function forcedPattern(ctx){ // red diagonal hatch: readable without telling red
   x.fillStyle="#5a1f1a";x.fillRect(0,0,8,8);x.strokeStyle="#FC6255";x.lineWidth=2;x.beginPath();x.moveTo(-2,10);x.lineTo(10,-2);x.stroke();
   return _fp=ctx.createPattern(c,"repeat");
 }
+let curV=[0,NH];
+const tlView=t=>mq.matches?[dayEdges[dayOf(t)],dayEdges[dayOf(t)+1]]:[0,NH];
 function drawTl(t){
-  const W=tl.width,H=tl.height,d=tdpr,L=PADL*d,R=W-PADR*d;
-  const xOf=h=>L+(R-L)*h/NH;
+  const W=tl.width,H=tl.height,d=tdpr,L=PADL*d,R=W-PADR*d,mob=mq.matches;
+  const [v0,v1]=curV=tlView(t);
+  const xOf=h=>L+(R-L)*(h-v0)/(v1-v0);
   tctx.clearRect(0,0,W,H);tctx.textBaseline="alphabetic";
-  const lanesB=(PADT+NC*(LANE+4))*d, bottom=H-10*d;
-  tctx.strokeStyle="#333";tctx.lineWidth=1;tctx.fillStyle="#9a9a9a";tctx.font=`${11*d}px system-ui`;tctx.textAlign="left";
-  for(let k=0;k<=NDAYS;k++){const x=xOf(dayEdges[k]);tctx.beginPath();tctx.moveTo(x,PADT*d);tctx.lineTo(x,bottom);tctx.stroke();
-  }
-  // lanes: cave state (red = seals forced out) with the green visit windows
+  const lanesB=(PADT+NC*(LANE+4))*d, bottom=H-(10+AXB)*d;
+  const clipOn=()=>{tctx.save();tctx.beginPath();tctx.rect(L,0,R-L,H);tctx.clip()}, clipOff=()=>tctx.restore();
+  const k0=Math.max(0,Math.floor(v0/STEP)-1), k1=Math.min(NS,Math.ceil(v1/STEP)+1);
+  const font=(bold,n)=>`${bold?"bold ":""}${fsz(n)*d}px system-ui`;
+  // guides: forecast-day edges on the overview; every 3 hours, with the hour, on the one-day phone view
+  tctx.strokeStyle="#333";tctx.lineWidth=1;tctx.fillStyle="#9a9a9a";tctx.font=font(false,11);
+  if(mob){tctx.textAlign="center";
+    for(let h=Math.ceil(v0);h<=v1;h++){const tt=hhmm(h);if(!tt.endsWith(":00")||(+tt.slice(0,2))%3)continue;const x=xOf(h);
+      tctx.beginPath();tctx.moveTo(x,PADT*d);tctx.lineTo(x,bottom);tctx.stroke();tctx.fillText(tt.slice(0,2),x,H-4*d)}
+  }else for(let k=0;k<=NDAYS;k++){const x=xOf(dayEdges[k]);tctx.beginPath();tctx.moveTo(x,PADT*d);tctx.lineTo(x,bottom);tctx.stroke()}
+  // lanes: cave state (red hatch = seals forced out) with the green visit windows
   CAVES.forEach((c,ci)=>{
     const y0=(PADT+ci*(LANE+4))*d,hh=LANE*d;
-    for(let k=0;k<NS;k++){const x0=xOf(k*STEP),x1=xOf((k+1)*STEP);
+    clipOn();
+    for(let k=k0;k<Math.min(NS,k1);k++){const x0=xOf(k*STEP),x1=xOf((k+1)*STEP);
       tctx.fillStyle=flood[ci][k]?forcedPattern(tctx):"#2a2a2a";tctx.fillRect(x0,y0,x1-x0+0.5,hh)}
-    tctx.textAlign="right";tctx.fillStyle=CCOL[ci];tctx.font=`bold ${11*d}px system-ui`;tctx.fillText(c.name,L-6*d,y0+hh/2+4*d);
-    for(const w of windows){if(w.ci!==ci)continue;
+    for(const w of windows){if(w.ci!==ci||w.b<v0||w.a>v1)continue;
       const x0=xOf(w.a),x1=xOf(w.b);tctx.fillStyle="#83C167";tctx.fillRect(x0,y0,x1-x0,hh);
-      tctx.fillStyle="#13210f";tctx.textAlign="center";
-      if(x1-x0>62*d)tctx.fillText(`${hhmm(w.a)}-${hhmm(w.b)}`,(x0+x1)/2,y0+hh/2+4*d);}
+      if(x1-x0>62*d){tctx.fillStyle="#13210f";tctx.textAlign="center";tctx.font=font(false,11);tctx.fillText(`${hhmm(w.a)}-${hhmm(w.b)}`,(x0+x1)/2,y0+hh/2+4*d)}}
+    clipOff();
+    tctx.fillStyle=CCOL[ci];tctx.font=font(true,11);
+    if(mob){tctx.textAlign="center";tctx.fillText(c.name.slice(0,3),L/2,y0+hh/2+4*d)}
+    else{tctx.textAlign="right";tctx.fillText(c.name,L-6*d,y0+hh/2+4*d)}
   });
   // forecast panels
   PANELS.forEach((pn,pi)=>{
-    const top=lanesB+(8+pi*(PH+PGAP))*d, bot=top+PH*d, mn=pn.min||0;
+    const top=lanesB+(PGAP+pi*(PH+PGAP))*d, bot=top+PH*d, mn=pn.min||0;
     const y=v=>bot-(bot-top)*clamp((v-mn)/(pn.max-mn),0,1);
-    tctx.fillStyle="rgba(236,236,236,.85)";tctx.font=`bold ${11*d}px system-ui`;tctx.textAlign="left";tctx.fillText(pn.title,L+4*d,top-3*d);
+    tctx.fillStyle="rgba(236,236,236,.85)";tctx.font=font(true,11);tctx.textAlign="left";tctx.fillText(pn.title+(mob?" (m)":""),L+4*d,top-4*d);
     tctx.fillStyle="#202020";tctx.fillRect(L,top,R-L,bot-top);
-    tctx.fillStyle="rgba(131,193,103,.16)";for(const w of windows)tctx.fillRect(xOf(w.a),top,xOf(w.b)-xOf(w.a),bot-top);
-    tctx.font=`${11*d}px system-ui`;tctx.textAlign="right";
-    for(const v of pn.ticks){tctx.strokeStyle="#2e2e2e";tctx.lineWidth=1;tctx.beginPath();tctx.moveTo(L,y(v));tctx.lineTo(R,y(v));tctx.stroke();
-      tctx.fillStyle="#9a9a9a";tctx.fillText(pn.key==="dir"?(COMPASS[v]||v):v+" m",L-6*d,y(v)+3*d)}
-    if(!pn.ok){tctx.fillStyle="#9a9a9a";tctx.textAlign="center";tctx.font=`${12*d}px system-ui`;
+    if(!pn.ok){tctx.fillStyle="#9a9a9a";tctx.textAlign="center";tctx.font=font(false,12);
       tctx.fillText("not loaded yet: needs "+pn.need+" from Copernicus (login)",(L+R)/2,(top+bot)/2+4*d);return}
+    clipOn();
+    tctx.fillStyle="rgba(131,193,103,.16)";for(const w of windows)tctx.fillRect(xOf(w.a),top,xOf(w.b)-xOf(w.a),bot-top);
+    for(const v of pn.ticks){tctx.strokeStyle="#2e2e2e";tctx.lineWidth=1;tctx.beginPath();tctx.moveTo(L,y(v));tctx.lineTo(R,y(v));tctx.stroke()}
     if(pn.key==="hs"){
       tctx.setLineDash([4*d,4*d]);tctx.lineWidth=1*d;
       tctx.strokeStyle="rgba(236,236,236,.55)";tctx.beginPath();tctx.moveTo(L,y(S.tripHs));tctx.lineTo(R,y(S.tripHs));tctx.stroke();
       tctx.strokeStyle="rgba(252,98,85,.7)";tctx.beginPath();tctx.moveTo(L,y(S.floodHs));tctx.lineTo(R,y(S.floodHs));tctx.stroke();
-      tctx.setLineDash([]);tctx.textAlign="left";tctx.fillStyle="rgba(236,236,236,.6)";tctx.fillText("trip limit",R-56*d,y(S.tripHs)-3*d);
-      tctx.fillStyle="rgba(252,98,85,.9)";tctx.fillText("forced out",R-56*d,y(S.floodHs)-3*d)}
-    if(pn.key==="dir"){tctx.fillStyle="rgba(252,98,85,.12)";CAVES.forEach((c,ci)=>{const [a,b]=badSector(ci);tctx.fillRect(L,y(b),R-L,y(a)-y(b))})}
+      tctx.setLineDash([])}
     CAVES.forEach((c,ci)=>{
-      const get=k=>pn.key==="hs"?hsAt[ci][k]:pn.key==="tide"?tdAt[ci][k]:pn.key==="sw"?swAt[ci][k]:drAt[ci][k];
+      const get=k=>pn.key==="hs"?hsAt[ci][k]:pn.key==="tide"?tdAt[ci][k]:swAt[ci][k];
       if(pn.key==="tide"&&ci>0)return;
-      tctx.strokeStyle=tctx.fillStyle=CCOL[ci];tctx.lineWidth=2*d;
-      if(pn.key==="dir"){for(let k=0;k<=NS;k+=2){tctx.fillRect(xOf(k*STEP)-1*d,y(get(k))-1*d,2.2*d,2.2*d)}return}
-      tctx.beginPath();for(let k=0;k<=NS;k++){const x=xOf(k*STEP),yy=y(get(k));k?tctx.lineTo(x,yy):tctx.moveTo(x,yy)}tctx.stroke()});
+      tctx.strokeStyle=CCOL[ci];tctx.lineWidth=2*d;
+      tctx.beginPath();for(let k=k0;k<=k1;k++){const x=xOf(k*STEP),yy=y(get(k));k===k0?tctx.moveTo(x,yy):tctx.lineTo(x,yy)}tctx.stroke()});
+    clipOff();
+    tctx.font=font(false,11);tctx.textAlign="right";tctx.fillStyle="#9a9a9a";
+    const every=Math.max(1,Math.ceil(fsz(11)*1.2/(PH/(pn.ticks.length-1))));   // skip labels that would overlap
+    pn.ticks.forEach((v,i)=>{if(i%every===0)tctx.fillText(mob?v:v+" m",L-6*d,y(v)+4*d)});
+    if(pn.key==="hs"){ // what the dashed lines mean, on the title line so they never sit on the curves
+      const f="- - forced out", g="- - trip limit";
+      tctx.fillStyle="rgba(252,98,85,.95)";tctx.fillText(f,R-4*d,top-4*d);
+      tctx.fillStyle="rgba(236,236,236,.7)";tctx.fillText(g,R-4*d-tctx.measureText(f).width-14*d,top-4*d)}
   });
-  tctx.setLineDash([3*d,3*d]);tctx.strokeStyle="rgba(236,236,236,.6)";tctx.lineWidth=1*d;tctx.beginPath();tctx.moveTo(xOf(NOW),PADT*d);tctx.lineTo(xOf(NOW),bottom);tctx.stroke();tctx.setLineDash([]);
-  tctx.fillStyle="rgba(236,236,236,.7)";tctx.textAlign="left";tctx.font=`${10*d}px system-ui`;tctx.fillText("now "+hhmm(NOW),xOf(NOW)+3*d,bottom-3*d);
+  if(NOW>=v0&&NOW<=v1){
+    tctx.setLineDash([3*d,3*d]);tctx.strokeStyle="rgba(236,236,236,.6)";tctx.lineWidth=1*d;tctx.beginPath();tctx.moveTo(xOf(NOW),PADT*d);tctx.lineTo(xOf(NOW),bottom);tctx.stroke();tctx.setLineDash([]);
+    const lab="now "+hhmm(NOW);tctx.fillStyle="rgba(236,236,236,.8)";tctx.font=font(false,11);
+    const right=xOf(NOW)+6*d+tctx.measureText(lab).width>R;tctx.textAlign=right?"right":"left";tctx.fillText(lab,xOf(NOW)+(right?-4:4)*d,bottom-3*d)}
   const px=xOf(t);tctx.strokeStyle="#ececec";tctx.lineWidth=1.5*d;tctx.beginPath();tctx.moveTo(px,PADT*d);tctx.lineTo(px,bottom);tctx.stroke();
 }
-function tlTime(ev){const r=tl.getBoundingClientRect();const x=(ev.clientX-r.left)*tdpr;return clamp((x-PADL*tdpr)/(tl.width-(PADL+PADR)*tdpr)*NH,0,NH-0.01)}
+function tlTime(ev){const r=tl.getBoundingClientRect(),[v0,v1]=curV;const x=(ev.clientX-r.left)*tdpr;return clamp(v0+(x-PADL*tdpr)/(tl.width-(PADL+PADR)*tdpr)*(v1-v0),v0,Math.min(v1,NH)-0.01)}
 
 /* ---------- UI ---------- */
 let T=0, playing=false, rate=6, last=performance.now();
