@@ -93,6 +93,30 @@ label.chk{font-size:12px;color:var(--fg);display:flex;gap:6px;align-items:center
 #simbox{display:flex;flex-direction:column;gap:5px}
 #simstatus{white-space:pre-wrap;word-break:break-word}
 details summary{cursor:pointer}
+#tl{touch-action:pan-y}  /* horizontal drags scrub the timeline; vertical swipes still scroll the page */
+/* phone (portrait or landscape) and small tablet: one column, the page scrolls, touch-sized controls */
+@media (max-width:820px),(max-height:500px){
+  html,body{height:auto}
+  body{overflow:auto;padding:8px 10px}
+  header .sub{flex-basis:100%}
+  .layout{display:flex;flex-direction:column;gap:8px}
+  main{gap:8px}
+  #mapcard{flex:none;min-height:0}
+  #mapbox{flex-direction:column;gap:8px}
+  #mapslot{order:-1;flex:none;width:100%}
+  #info{width:100%;overflow:visible}
+  aside{overflow:visible}
+  #windows{max-height:none}
+  #controls{flex-wrap:wrap}
+  #controls .hint{display:none}
+  #clock{margin-left:auto}
+  button,select{min-height:40px;font-size:16px;padding:6px 14px}  /* 16px: Chrome and iOS do not zoom on focus */
+  .win{padding:9px 10px;font-size:14px}
+  .row input[type=number]{font-size:16px;padding:6px}
+  label.chk{font-size:14px;min-height:36px}
+  details summary{padding:6px 0}
+  .credits img{max-width:100%;height:auto}
+}
 </style>
 </head>
 <body>
@@ -398,7 +422,9 @@ function buildOverlay(){
 function sizeCanvas(cv,hCss){const dpr=Math.min(window.devicePixelRatio||1,2);const w=cv.clientWidth;cv.width=Math.round(w*dpr);cv.height=Math.round(hCss*dpr);cv.style.height=hCss+"px";return dpr}
 let mdpr=1;
 function resizeMap(){
-  const box=$("mapslot"),bw=box.clientWidth,bh=box.clientHeight;if(!bw||!bh)return;
+  const box=$("mapslot"),bw=box.clientWidth,mobile=matchMedia("(max-width:820px),(max-height:500px)").matches,
+    bh=mobile?bw/ASPECT:box.clientHeight;  // stacked on a phone: the map's height follows its width
+  if(!bw||!bh)return;
   const w=Math.floor(Math.min(bw,bh*ASPECT)),h=Math.floor(w/ASPECT);
   const dpr=Math.min(window.devicePixelRatio||1,2);mdpr=dpr;
   map.style.width=w+"px";map.style.height=h+"px";map.width=Math.round(w*dpr);map.height=Math.round(h*dpr);
@@ -429,7 +455,9 @@ const SW_MIN=0.5; // metres of swell below which no swell lines are drawn
 function labelPill(x,y,align,nameColor,border,lines,fromDeg){
   const ls=lines.filter(Boolean),m=mdpr,pad=6*m,lh=15*m,arrowW=20*m;
   mctx.font=`bold ${12*m}px system-ui`;const w=Math.max(...ls.map((t,i)=>{mctx.font=`${i===0?"bold 12":"11"}px system-ui`.replace(/(\d+)px/,(a,n)=>n*m+"px");return mctx.measureText(t).width}))+2*pad+arrowW;
-  const h=ls.length*lh+pad,x0=align==="right"?x-w:x,y0=y-h/2;
+  const h=ls.length*lh+pad,
+    x0=Math.max(2*m,Math.min(map.width-w-2*m,align==="right"?x-w:x)),   // keep the pill inside the map (small phone screens)
+    y0=Math.max(2*m,Math.min(map.height-h-2*m,y-h/2));
   mctx.fillStyle="rgba(16,22,27,.88)";mctx.strokeStyle=border||"rgba(236,236,236,.35)";mctx.lineWidth=(border?1.5:1)*m;
   mctx.beginPath();mctx.roundRect(x0,y0,w,h,5*m);mctx.fill();mctx.stroke();
   mctx.textAlign="left";
