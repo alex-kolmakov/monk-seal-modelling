@@ -225,96 +225,6 @@ class CopernicusManager:
                 f"start_date ({start_date}) must be before end_date ({end_date})"
             )
 
-    def list_products(self, search_term: str | None = None) -> list[dict[str, Any]]:
-        """List products from Copernicus Marine Service.
-
-        Args:
-            search_term: Optional search term to filter products
-
-        Returns:
-            List of product dictionaries with title, product_id, and description
-
-        Example:
-            >>> manager = CopernicusManager()
-            >>> products = manager.list_products(search_term="IBI")
-            >>> print(products[0]['title'])
-        """
-        logger.info(f"Listing products with search term: {search_term}")
-
-        def _list() -> list[dict[str, Any]]:
-            contains = [search_term] if search_term else None
-            catalogue = copernicusmarine.describe(contains=contains, disable_progress_bar=True)
-
-            results = []
-            if hasattr(catalogue, "products"):
-                for product in catalogue.products:
-                    results.append(
-                        {
-                            "title": getattr(product, "title", ""),
-                            "product_id": getattr(product, "product_id", ""),
-                            "description": getattr(product, "description", ""),
-                        }
-                    )
-
-            return results
-
-        try:
-            return self._retry_with_backoff(_list)
-        except CopernicusAPIError as e:
-            logger.error(f"Failed to list products: {e}")
-            return []
-
-    def get_product_metadata(self, product_id: str) -> dict[str, Any]:
-        """Get comprehensive metadata for a specific product.
-
-        Args:
-            product_id: The Copernicus product ID (e.g., 'IBI_MULTIYEAR_PHY_005_002')
-
-        Returns:
-            Dictionary containing product metadata including title, description,
-            DOI, keywords, and list of datasets
-
-        Raises:
-            DatasetNotFoundError: If product is not found
-
-        Example:
-            >>> manager = CopernicusManager()
-            >>> metadata = manager.get_product_metadata("IBI_MULTIYEAR_PHY_005_002")
-            >>> print(metadata['title'])
-        """
-        logger.info(f"Fetching metadata for product: {product_id}")
-
-        def _get_metadata() -> dict[str, Any]:
-            catalogue = copernicusmarine.describe(product_id=product_id, disable_progress_bar=True)
-
-            if hasattr(catalogue, "model_dump"):
-                data = catalogue.model_dump()
-                products = data.get("products", [])
-
-                if products:
-                    product = products[0]
-                    return {
-                        "product_id": product.get("product_id"),
-                        "title": product.get("title"),
-                        "description": product.get("description"),
-                        "doi": product.get("digital_object_identifier"),
-                        "keywords": product.get("keywords", []),
-                        "processing_level": product.get("processing_level"),
-                        "production_center": product.get("production_center"),
-                        "sources": product.get("sources", []),
-                        "datasets": [
-                            {
-                                "dataset_id": ds.get("dataset_id"),
-                                "dataset_name": ds.get("dataset_name"),
-                            }
-                            for ds in product.get("datasets", [])
-                        ],
-                    }
-
-            raise DatasetNotFoundError(f"Product not found: {product_id}")
-
-        return self._retry_with_backoff(_get_metadata)
-
     def get_dataset_info(self, dataset_id: str) -> dict[str, Any]:
         """Get comprehensive information about a specific dataset.
 
@@ -360,40 +270,6 @@ class CopernicusManager:
             raise DatasetNotFoundError(f"Dataset not found: {dataset_id}")
 
         return self._retry_with_backoff(_get_info)
-
-    def get_dataset_coverage(self, dataset_id: str) -> dict[str, Any]:
-        """Get spatial and temporal coverage information for a dataset.
-
-        Args:
-            dataset_id: The dataset ID
-
-        Returns:
-            Dictionary with latitude, longitude, time, and depth coverage
-
-        Example:
-            >>> manager = CopernicusManager()
-            >>> coverage = manager.get_dataset_coverage("cmems_mod_ibi_phy_my_0.027deg_P1D-m")
-            >>> print(coverage['bbox'])
-        """
-        info = self.get_dataset_info(dataset_id)
-        return info.get("coverage", {})
-
-    def get_dataset_variables(self, dataset_id: str) -> list[dict[str, Any]]:
-        """Get list of available variables in a dataset.
-
-        Args:
-            dataset_id: The dataset ID
-
-        Returns:
-            List of dictionaries containing variable metadata
-
-        Example:
-            >>> manager = CopernicusManager()
-            >>> variables = manager.get_dataset_variables("cmems_mod_ibi_phy_my_0.027deg_P1D-m")
-            >>> print([v['short_name'] for v in variables])
-        """
-        info = self.get_dataset_info(dataset_id)
-        return info.get("variables", [])
 
     def search_datasets(
         self,

@@ -27,9 +27,7 @@ class SealState(Enum):
 @dataclass
 class SealMemory:
     haulout_sites: list[tuple[float, float]] = field(default_factory=list)
-    high_hsi_patches: list[tuple[float, float]] = field(default_factory=list)
     foraging_patches: list[tuple[float, float]] = field(default_factory=list)
-    last_known_storm_pos: tuple[float, float] | None = None
 
 
 def _nav(buffers: dict) -> dict:
@@ -105,7 +103,6 @@ class SealAgent:
         self.age_in_hours = 0
         self.state_duration = 0  # Track how long we've been in current state
         self.patch_residence_time = 0  # Track time in current forage patch (Boredom)
-        self.haulout_failures = 0  # Track consecutive failed haul-out attempts
         self.distance_to_land = 999.0  # Track distance to nearest land (km)
         self.debug = self.id == "0"
 
@@ -303,7 +300,6 @@ class SealAgent:
             if is_land and self._in_haulout_box():
                 # Successfully reached land!
                 self.state = SealState.SLEEPING
-                self.haulout_failures = 0  # Reset failure counter
 
                 # Memorize Haulout
                 found = False

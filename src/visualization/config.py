@@ -19,7 +19,6 @@ class WeatherVisualizationConfig:
         temp_range: Temperature colormap range (min, max) in °C
         wave_range: Wave height colormap range (min, max) in meters
         chl_range: Chlorophyll colormap range (min, max)
-        depth_range: Depth colormap range (min, max) in meters
 
     Example:
         >>> config = WeatherVisualizationConfig(
@@ -46,7 +45,6 @@ class WeatherVisualizationConfig:
     wave_range: tuple[float, float] = (0.0, 5.0)  # More dramatic gradient, up to 5m
     chl_range: tuple[float, float] = (0.0, 0.5)
     current_range: tuple[float, float] = (0.0, 1.0)  # Current speed in m/s
-    depth_range: tuple[float, float] = (0.0, 500.0)
 
 
 @dataclass

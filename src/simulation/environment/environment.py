@@ -5,7 +5,7 @@ import pandas as pd
 import xarray as xr
 
 from .bathymetry import load_emodnet_bathymetry
-from .utils import navigation_grids, query_env_buffers
+from .utils import navigation_grids
 
 # Configure sorting
 logging.basicConfig(level=logging.INFO)
@@ -351,27 +351,3 @@ class Environment:
 
         # Tide: metres above TIDE_DATUM_M (scalar, colony-wide)
         self.buffers["tide"] = self._tide_at(self.current_time)
-
-    def get_data_at_pos(
-        self, lat: float, lon: float, time: pd.Timestamp | str | None = None
-    ) -> dict[str, float]:
-        """Fast lookup from buffers."""
-        # Ensure buffers are up to date
-        if time is not None and time != self.current_time:
-            self.update_buffers(time)
-
-        # Delegate to stateless util
-        data = query_env_buffers(lat, lon, self.buffers)
-
-        if time:
-             # If time provided, we might be out of sync with buffers["tide"]?
-             # But get_data_at_pos forces update_buffers(time) if different.
-             # So buffers["tide"] is correct.
-             pass
-
-        # Retrieve tide from buffers/utils
-        # (utils.query_env_buffers will retrieve it)
-        # data["tide"] is already in data from query_env_buffers (see next step)
-        pass
-
-        return data

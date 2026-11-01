@@ -35,7 +35,6 @@ class TestWeatherVisualizationConfig:
         assert config.temp_range == (15.0, 25.0)
         assert config.wave_range == (0.0, 5.0)
         assert config.chl_range == (0.0, 0.5)
-        assert config.depth_range == (0.0, 500.0)
 
     def test_custom_ranges(self):
         """Test custom data ranges."""
