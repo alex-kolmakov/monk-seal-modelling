@@ -641,7 +641,7 @@ function renderWx(counts){
     +row("Swell",x=>`<span class="v">${x.sw.toFixed(1)} m</span>`)
     +row("Swell from",x=>x.sw>=SW_MIN?`<span class="v">${dirTxt(x.swd)}</span>`:`<span class="v na">weak</span>`)
     +`<span class="sep"></span>`
-    +row("<b>Visit</b>",x=>{const nx=windows.find(w=>w.ci===x.ci&&w.a>T);return x.w?`<span class="v okb">open until ${hhmm(x.w.b)}</span>`:`<span class="v na">${nx?"next "+hhmm(nx.a):"closed"}</span>`})
+    +row("<b>Visit</b>",x=>{const nx=windows.find(w=>w.ci===x.ci&&w.a>T);return x.w?`<span class="v okb">open until ${hhmm(x.w.b)}</span>`:nx?`<span class="v">${nextTxt(nx)}</span>`:`<span class="v na">closed</span>`})
     ;
   renderVerdict(counts);
 }
@@ -663,7 +663,7 @@ function renderVerdict(counts){
   const ended=SIM&&!colLive, early=SIM&&!ended&&(colBal==null||colBalBase==null||colBalW<BAL_MIN_WINDOW), state=!SIM||ended||early?"unknown":why.length?"notfine":"fine", key=state+ended+early+Math.round((dip||0)*10)+colLowE+colLowFatN+why.join()+counts.rest+counts.commute+counts.forage+counts.forced;
   if(key===verdictKey)return;verdictKey=key;
   const sum=$("colsum");sum.className=state;
-  sum.innerHTML=`<i></i>${{fine:"Seals approve",notfine:"Seals do not approve",unknown:ended?"Seals: model run ended":early?"Seals: too early to judge":"Seals: no model run"}[state]}`;
+  sum.innerHTML=`<i></i>${{fine:"Seals approve",notfine:"Seals do not approve",unknown:ended?"Seals: model run ended":early?"Seals: judged after the first day of the run":"Seals: no model run"}[state]}`;
   $("colwhy").textContent=state==="unknown"?(ended?"The model run covers 8 days; there are no seals to judge after it.":early?"The energy balance needs a day of the model run.":"Load data and simulate seals to judge their condition."):state==="fine"?`Colony energy balance ${fmt(colBal)} MJ per seal per day over the last ${colBalW} h, ${dip>=0?"at or above":Math.abs(dip).toFixed(1)+" below"} this run's typical ${fmt(colBalBase)}; the seals approve until it is ${Math.abs(BAL_DIP)} below.`:why.join("; ")+".";
   $("colfat").textContent=SIM&&!ended?(colLowFatN?`${colLowFatN} of ${colAlive} seal${colLowFatN>1?"s":""} under ${LOW_FAT} kg of fat reserve (slow risk).`:`No seal under ${LOW_FAT} kg of fat reserve.`):"";
   const kv=(k,v,c)=>`<span class="k">${k}</span><span class="v ${c||""}" style="grid-column:2/4">${v}</span>`;
@@ -719,6 +719,8 @@ function renderColony(t){
       +`<td>${r.e==null?"–":bar(r.e,ec)+` ${r.e}%`}</td><td>${r.m==null?"–":r.m.toFixed(0)}</td><td>${r.m==null?"–":resv(r.m).toFixed(0)}</td><td>${r.g==null?"–":Math.round(r.g/(SIM.stomach_cap||15)*100)+"%"}</td></tr>`}
   $("colony").innerHTML=h+'</tbody></table>';
 }
+const relIn=h=>{if(h<1)return `in ${Math.max(1,Math.round(h*60))} min`;const hh=Math.round(h);return hh<24?`in ${hh} h`:`in ${Math.floor(hh/24)} d${hh%24?` ${hh%24} h`:""}`};
+const nextTxt=nx=>`${nx.day===dayOf(T)?"today":dayLabel(nx.day)}<br><small>${hhmm(nx.a)} · ${relIn(nx.a-T)}</small>`;
 const wxEl=$("wx");
 function frame(now){
   const dt=(now-last)/1000;last=now;
@@ -750,7 +752,7 @@ function simLabel(){
   document.querySelectorAll("#s-seal, #s-seal-h").forEach(e=>e.style.display=SIM?"none":"");
   $("colony").style.display=SIM?"":"none";
   simSt.className="empty";
-  simSt.textContent=SIM?`Seals shown: real model, ${SIM.seals.length} seals, seed ${SIM.seed}, run ${SIM.made}. It covers the first ${Math.round(SIM.hours/24)} days; after that the seals stay where they ended.`:"Seals shown: scripted, illustrative.";
+  simSt.textContent=SIM?`Seals shown: a model run of ${SIM.seals.length} seals (${SIM.made}). It covers the first ${Math.round(SIM.hours/24)} days; after that the seals stay where they ended.`:"Seals shown: scripted, illustrative.";
 }
 async function loadSeals(){
   try{const r=await fetch("seals.json",{cache:"no-store"});if(!r.ok)return false;const d=await r.json();
