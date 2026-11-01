@@ -5,7 +5,7 @@ Copernicus Marine IBI forecast for the two breeding caves, marks the hours when 
 visited, and runs the seal model on the same forecast to show how a colony of digital seals
 copes with the coming days. It was built for the Copernicus Marine Hackathon 2026.
 
-Screen recordings (animated): [calm week, green visit windows](media/forecast-green-cave-windows.gif) and [storm week replay, red blocks = seals forced out](media/forecast-red-storm-replay.gif).
+Screen recording (animated, calm week then storm-week replay): [forecast-page.gif](media/forecast-page.gif).
 
 ## Why
 

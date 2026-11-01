@@ -13,17 +13,17 @@
   </a>
 </p>
 
+<p align="center">
+  <img src="docs/media/poster.png" alt="I won. Seal of Approval, Copernicus Marine Hackathon 2026" width="100%">
+</p>
+
 Fewer than 40 Mediterranean monk seals live around Madeira and depend on two caves on the Desertas. The programme team that looks after them has had to plan cave visits (camera maintenance, colony risk assessment) without a forecast. Seal of Approval turns the Copernicus Marine IBI wave and sea-level forecast into **hourly visit windows for each cave, up to 8 days ahead**, and runs a colony of digital seals on the same forecast to show how it copes with a storm. Built for the Copernicus Marine Hackathon 2026.
 
 ## The page
 
-**A calm week.** Green marks mean the cave can be visited. The list on the right gives each window with its length.
+The recording below shows a **calm week first** (green marks mean the cave can be visited; the list on the right gives each window and its length), then a **storm week replayed** (1 to 8 Feb 2026). In the storm week red blocks mean the sea is high enough to force seals out of the cave, and the same forecast drives the digital seals, with the colony table showing how they cope.
 
-<p align="center"><img src="docs/media/forecast-green-cave-windows.gif" alt="Forecast page in a calm week: green visit windows for both caves" width="100%"></p>
-
-**A storm week, replayed (1 to 8 Feb 2026).** Red blocks mean the sea is high enough to force seals out of the cave. The same forecast drives the digital seals, and the colony table shows how they cope.
-
-<p align="center"><img src="docs/media/forecast-red-storm-replay.gif" alt="Forecast page replaying a storm week: red forced-out blocks and the colony condition table" width="100%"></p>
+<p align="center"><img src="docs/media/forecast-page.gif" alt="Forecast page: a calm week with green visit windows, then a storm-week replay with red forced-out blocks and the colony condition table" width="100%"></p>
 
 ### How to read it
 
@@ -91,9 +91,3 @@ Many behaviour thresholds are placeholders (tide height at which a cave floods, 
 Data: [Copernicus Marine Service](https://marine.copernicus.eu/) (IBI forecast), [EMODnet Bathymetry](https://emodnet.ec.europa.eu/en/bathymetry). Field knowledge and thresholds: the IFCN Madeira monk seal programme (VECLAM team). Poster photo: from [blog.madeira.best](https://blog.madeira.best/desertas-islands-madeira) (photographer not named there; reuse rights not confirmed, tell me and I will take it down).
 
 Supports priorities 1 (protecting and restoring ocean health) and 3 (coastal and island communities, outermost regions) of the [European Ocean Pact](https://oceans-and-fisheries.ec.europa.eu/european-ocean-pact_en).
-
-## Hackathon
-
-<p align="center">
-  <img src="docs/media/poster.png" alt="Seal of Approval, Copernicus Marine Hackathon 2026" width="520">
-</p>
