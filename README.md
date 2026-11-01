@@ -88,7 +88,7 @@ Many behaviour thresholds are placeholders (tide height at which a cave floods, 
 
 ## Credits
 
-Data: [Copernicus Marine Service](https://marine.copernicus.eu/) (IBI forecast), [EMODnet Bathymetry](https://emodnet.ec.europa.eu/en/bathymetry). Field knowledge and thresholds: the IFCN Madeira monk seal programme (VECLAM team). Poster photo: Marinko Babić, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0), via [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Monachus_monachus_DSC_0274.jpg); the poster is shared under the same licence.
+Data: [Copernicus Marine Service](https://marine.copernicus.eu/) (IBI forecast), [EMODnet Bathymetry](https://emodnet.ec.europa.eu/en/bathymetry). Field knowledge and thresholds: the IFCN Madeira monk seal programme (VECLAM team). Poster photo: from [blog.madeira.best](https://blog.madeira.best/desertas-islands-madeira) (photographer not named there; reuse rights not confirmed, tell me and I will take it down).
 
 Supports priorities 1 (protecting and restoring ocean health) and 3 (coastal and island communities, outermost regions) of the [European Ocean Pact](https://oceans-and-fisheries.ec.europa.eu/european-ocean-pact_en).
 
