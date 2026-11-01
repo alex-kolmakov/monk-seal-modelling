@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://upload.wikimedia.org/wikipedia/commons/5/51/Monachus_monachus_DSC_0274.jpg" alt="Mediterranean Monk Seal" width="600">
+  <img src="docs/media/poster.png" alt="Seal of Approval, Copernicus Marine Hackathon 2026" width="520">
 </p>
 
 <h1 align="center">🦭 Seal of Approval</h1>
@@ -12,325 +12,75 @@
   <a href="https://github.com/alex-kolmakov/seal-of-approval/actions/workflows/lint_typecheck_test.yml">
     <img src="https://github.com/alex-kolmakov/seal-of-approval/actions/workflows/lint_typecheck_test.yml/badge.svg" alt="CI Status">
   </a>
-  <a href="https://www.python.org/downloads/">
-    <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
-  </a>
-  <a href="https://github.com/astral-sh/uv">
-    <img src="https://img.shields.io/badge/uv-package%20manager-blueviolet.svg" alt="uv">
-  </a>
   <a href="https://marine.copernicus.eu/">
     <img src="https://img.shields.io/badge/data-Copernicus%20Marine-00629B.svg" alt="Copernicus Marine">
   </a>
 </p>
 
-<p align="center">
-  <a href="#-features">Features</a> •
-  <a href="#-quick-start">Quick Start</a> •
-  <a href="#-project-structure">Structure</a> •
-  <a href="#-documentation">Documentation</a> •
-  <a href="#-contributing">Contributing</a>
-</p>
+Fewer than 40 Mediterranean monk seals live around Madeira and depend on two caves on the Desertas. The programme team that looks after them has had to plan cave visits (camera maintenance, colony risk assessment) without a forecast. Seal of Approval turns the Copernicus Marine IBI wave and sea-level forecast into **hourly visit windows for each cave, up to 8 days ahead**, and runs a colony of digital seals on the same forecast to show how it copes with a storm. Built for the Copernicus Marine Hackathon 2026.
 
----
+## The page
 
-## ✨ Features
-
-- 🌊 **Data-Driven Environment**: Real oceanographic data from [Copernicus Marine Service](https://marine.copernicus.eu/) (currents, temperature, waves, chlorophyll, hourly sea surface height)
-- 🧬 **Physiological Agents**: Energy balance, stomach load, digestion, and starvation dynamics
-- 🌙 **Tide-Driven Behavior**: Haul-out and cave access follow the real hourly tide (Copernicus IBI sea surface height, in metres), as observed for the Madeira population
-- 🎬 **Animation Export**: Generate MP4 videos of seal movements and environmental conditions
-- ⚡ **Fast Simulation**: Multiprocessing support for large population runs
-
----
-
-## 🌊 Seal of Approval: cave visit forecast
-
-A web page built on this model for the Copernicus Marine Hackathon 2026. It turns the Copernicus Marine IBI wave and sea-level forecast into hourly visit windows for the two Desertas breeding caves, up to 8 days ahead, and runs the digital colony on the same forecast to show how it copes with a storm. See [docs/forecast_page.md](docs/forecast_page.md).
-
-```bash
-cp .env.example .env                # Copernicus login and the two cave positions (kept out of the repo)
-uv run python prototype/fetch_forecast.py && uv run python prototype/build_forecast.py
-uv run python prototype/serve.py   # then open http://localhost:8765
-```
-
-The page, silent screen recordings: [green cave visit windows in a calm week](docs/media/forecast-green-cave-windows.mp4) and [red storm-week replay](docs/media/forecast-red-storm-replay.mp4).
-
----
-
-## 🎬 Examples
-
-<table>
-  <tr>
-    <td width="100%" align="center">
-      <strong>🦭 Seal Behavior Animation</strong><br><br>
-      <video src="https://github.com/user-attachments/assets/2d27736e-05b3-4c00-aebb-1918983f2fba" controls width="100%"></video>
-    </td>
-  </tr>
-</table>
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-| Requirement | Version | Installation |
-|-------------|---------|--------------|
-| Python | 3.12+ | [python.org](https://www.python.org/downloads/) |
-| uv | Latest | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
-| FFmpeg | Any | `brew install ffmpeg` (macOS) |
-
-### Installation
-
-```bash
-git clone https://github.com/alex-kolmakov/seal-of-approval.git
-cd seal-of-approval
-uv sync
-```
-
-### Credentials
-
-Create a `.env` file in the project root with your [Copernicus Marine](https://marine.copernicus.eu/) credentials (free registration):
-
-```
-COPERNICUS_USERNAME=your-username
-COPERNICUS_PASSWORD=your-password
-```
-
-### Run — Interactive Notebook (recommended)
-
-```bash
-uv run marimo edit notebooks/explore.py
-```
-
-Opens a reactive notebook in your browser. Edit the **CONFIG** block at the top of the first cell:
-
-| Variable | Description |
+| A calm week: green = the cave can be visited | A storm week, replayed: red = closed, seals under strain |
 |---|---|
-| `DATE_FROM` / `DATE_TO` | Date range in `DD-MM-YYYY` format — any period, any length |
-| `DOWNLOAD_DATA` | Set `True` to fetch missing Copernicus files (uses `.env` credentials) |
-| `RUN_SIM` | Set `True` to run the simulation |
-| `NUM_AGENTS` | Number of seal agents (10–50 recommended) |
-| `RENDER_VIDEO` | Set `True` to export an MP4 after the simulation |
+| <img src="docs/media/ui-calm-week.png" alt="Forecast page, calm week with green visit windows"> | <img src="docs/media/ui-storm-replay.png" alt="Forecast page, storm-week replay with red closed blocks"> |
 
-Save (`Cmd/Ctrl+S`) to trigger reactive re-execution of dependent cells.
+Silent screen recordings: [calm week](docs/media/forecast-green-cave-windows.mp4) · [storm replay](docs/media/forecast-red-storm-replay.mp4).
 
-### Run — Plain Script
+A cave is open in an hour when waves are below 1 m, the tide is low, and swell does not come from the cave's bad side. Each cave reads the closest all-sea wave tile, picked with EMODnet bathymetry. Details, thresholds and limits: [docs/forecast_page.md](docs/forecast_page.md).
 
 ```bash
-# Edit DATE_FROM, DATE_TO, RUN_SIM etc. directly in the file, then:
-uv run python notebooks/explore.py
+git clone https://github.com/alex-kolmakov/seal-of-approval.git && cd seal-of-approval
+uv sync
+cp .env.example .env     # Copernicus login (free) and the two cave positions, kept out of the repo
+uv run python -m src.data_ingestion.download_bathymetry
+uv run python prototype/fetch_forecast.py && uv run python prototype/build_forecast.py
+uv run python prototype/serve.py   # open http://localhost:8765
 ```
 
-### Run — CLI
+Needs Python 3.12+, [uv](https://github.com/astral-sh/uv) and, for animations, FFmpeg.
+
+## The model
+
+The page runs on an agent-based model of individual seals: energy balance, stomach load, digestion, body mass, hauling out with the real hourly tide, day trips to feeding grounds, and storm effects. No births yet, so it is not a population model.
 
 ```bash
-# Simulate 30 seals from 1 Jan to 30 May 2026
-# Data files (incl. ssh_{tag}.nc for the tide) must already exist in data/real_long/
-uv run python -m src.simulation.run_real_long \
-  --from 01-01-2026 \
-  --to   30-05-2026 \
-  --agents 30 \
-  --seed 42
+# 30 seals, 1 Jan to 30 May 2026 (data files must exist in data/real_long/)
+uv run python -m src.data_ingestion.download_data --from 01-01-2026 --to 30-05-2026
+uv run python -m src.simulation.run_real_long --from 01-01-2026 --to 30-05-2026 --agents 30 --seed 42
 
-# Output: data/real_long/long_sim_results.csv
-#         data/real_long/long_sim_results_stats.csv
-#         data/real_long/long_sim_results_meta.json   (inputs, tide source, n_deaths, n_out_of_bounds)
-# Use --out to change the file name; --synthetic-tide to run without ssh_{tag}.nc.
-# A run past the end of the data fails; --allow-time-wrap replays it from the start instead.
-```
-
-### Visualize Results
-
-```bash
-# Colony animation, the default mode: map, colony status, tide, swell and body mass
-# (requires a completed simulation CSV)
-uv run python -m src.visualization.seal_animator \
-  --colony-csv   data/real_long/long_sim_results.csv \
+# colony animation
+uv run python -m src.visualization.seal_animator --colony-csv data/real_long/long_sim_results.csv \
   --physics-file data/real_long/physics_20260101_20260530.nc
-
-# Single-seal animation: `seal_animator single --seal-csv <one-agent csv> --physics-file <nc>`
-
-# Environmental animation
-uv run python -m src.visualization.weather_visualizer \
-  --physics  data/real_long/physics_20260101_20260530.nc \
-  --waves    data/real_long/waves_20260101_20260530.nc \
-  --bgc      data/real_long/bgc_20260101_20260530.nc \
-  --tidal    <legacy DUACS file with `adt`>   # not yet ported to zos
 ```
 
-> **File naming**: all data files use a `YYYYMMDD_YYYYMMDD` tag derived from your chosen date range. The notebook handles this automatically.
+An interactive notebook is also available: `uv run marimo edit notebooks/explore.py`.
 
----
-
-## 📁 Project Structure
-
-```
-seal-of-approval/
-├── 📂 src/
-│   ├── 📂 simulation/           # Core simulation engine
-│   │   ├── 📂 agents/           # Seal agent logic & movement
-│   │   │   ├── seal.py          # SealAgent class with FSM
-│   │   │   ├── config.py        # SealConfig (all tunable parameters)
-│   │   │   └── movement.py      # Correlated random walk
-│   │   ├── 📂 environment/      # Environmental data handling
-│   │   │   ├── environment.py   # Xarray data loading & buffering, tide from zos
-│   │   │   └── utils.py         # Fast spatial queries
-│   │   ├── simulation.py        # Main simulation loop
-│   │   ├── agent_worker.py      # Multiprocessing worker
-│   │   └── run_real_long.py     # CLI entry point
-│   │
-│   ├── 📂 data_ingestion/       # Copernicus data retrieval
-│   │   ├── copernicus_manager.py
-│   │   ├── download_data.py     # CLI for data download
-│   │   └── discover_datasets.py
-│   │
-│   ├── 📂 visualization/        # Plotting & animation
-│   │   ├── seal_animator.py     # Seal behavior animations (single / colony)
-│   │   ├── weather_visualizer.py # Environmental animations
-│   │   ├── config.py            # Animation settings
-│   │   └── data_loader.py
-│
-├── 📂 prototype/                # Seal of Approval forecast page
-│   ├── index.html               # the page
-│   ├── serve.py                 # static server + on-demand seal run
-│   ├── fetch_forecast.py        # Copernicus IBI waves and tide
-│   ├── build_forecast.py        # writes forecast.js
-│   ├── simulate_forecast.py     # seal model on the forecast
-│   └── build_bathymetry.py      # EMODnet depth grid for the page
-│
-├── 📂 notebooks/
-│   └── explore.py               # marimo notebook (recommended entry point)
-│
-├── 📂 data/                     # Data directory (gitignored)
-│   └── 📂 real_long/            # Downloaded NetCDF files
-│
-├── 📂 docs/                     # Documentation
-│   ├── seal_agent_documentation.md
-│   ├── model_parameters.md
-│   ├── copernicus_data_discovery.md
-│   └── visualization_guide.md
-│
-├── 📂 tests/unit/               # Test suite
-├── 📄 pyproject.toml            # Project configuration
-└── 📄 README.md
-```
-
----
-
-## 📖 Documentation
+## Docs
 
 | Document | Description |
-|----------|-------------|
-| [Seal Agent Architecture](docs/seal_agent_documentation.md) | Biological parameters, state machine, and scientific validation |
-| [Model Parameters & Tuning](docs/model_parameters.md) | Configuration reference and how to adjust parameters |
-| [Data Retrieval Guide](docs/copernicus_data_discovery.md) | Copernicus datasets, download process, tidal integration |
-| [Visualization Guide](docs/visualization_guide.md) | Animation tools and troubleshooting |
-| [Forecast Page](docs/forecast_page.md) | The Seal of Approval cave visit forecast: data, rules, how to run, limits |
+|---|---|
+| [Forecast page](docs/forecast_page.md) | Data, visit rules, how to run, limits |
+| [Seal agent](docs/seal_agent_documentation.md) | Biology, state machine, sources |
+| [Model parameters](docs/model_parameters.md) | Every setting, what it does, how it was calibrated |
+| [Data retrieval](docs/copernicus_data_discovery.md) | Copernicus datasets and downloads |
+| [Visualization](docs/visualization_guide.md) | Animation tools |
 
----
-
-## 🧪 Development
-
-### Running Tests
+## Development
 
 ```bash
-# Run all tests with coverage
 uv run pytest
-
-# Run specific test file
-uv run pytest tests/unit/test_seal_fsm.py -v
-
-# Run with verbose output
-uv run pytest -v --tb=short
+uv run ruff check . && uv run pyrefly check
 ```
 
-### Code Quality
+CI runs ruff, pyrefly and pytest on every push.
 
-```bash
-# Lint with ruff
-uv run ruff check src/ tests/
+## Feedback welcome
 
-# Auto-fix linting issues
-uv run ruff check src/ tests/ --fix
+Many behaviour thresholds are placeholders (tide height at which a cave floods, swell that washes seals off, energy budget). If you work with monk seals and can check them, please [open an issue](https://github.com/alex-kolmakov/seal-of-approval/issues). The settings and their status are in [docs/model_parameters.md](docs/model_parameters.md).
 
-# Type checking with pyrefly
-uv run pyrefly check
-```
+## Credits
 
-### CI/CD
+Data: [Copernicus Marine Service](https://marine.copernicus.eu/) (IBI forecast), [EMODnet Bathymetry](https://emodnet.ec.europa.eu/en/bathymetry). Field knowledge and thresholds: the IFCN Madeira monk seal programme (VECLAM team). Poster photo: Marinko Babić, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0), via [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Monachus_monachus_DSC_0274.jpg); the poster is shared under the same licence.
 
-The project uses GitHub Actions for continuous integration:
-
-- **Linting**: `ruff check`
-- **Type Checking**: `pyrefly check`  
-- **Testing**: `pytest` with coverage reporting
-
----
-
-## 🔬 Scientific Background
-
-This model is based on research on the Mediterranean Monk Seal (*Monachus monachus*) population in the Madeira Archipelago. Key references:
-
-- **Tidal Activity**: [Pires et al. 2007](https://www.researchgate.net/publication/254846183) - Activity patterns of the Mediterranean monk seal in the Archipelago of Madeira
-- **Foraging Depths**: [Hale et al. 2011](https://www.aquaticmammalsjournal.org/wp-content/uploads/2011/08/37_3_Hale.pdf) - Mediterranean monk seal fishery interactions in the Archipelago of Madeira
-- **Pup Survival in Caves**: [Gazo et al. 2000](https://www.researchgate.net/publication/227717823) - Pup survival in the Mediterranean monk seal colony at Cabo Blanco Peninsula *(storm-driven mortality detail unverified)*
-- **Population & Vital Rates**: [Pires et al. 2023](https://doi.org/10.3354/esr01260) - First demographic parameter estimates for the Madeira population (27 seals in 2021; adult survival 0.98 females, 0.90 males; pupping Oct–Dec)
-- **Habitat**: [Karamanlidis et al. 2004](https://www.cambridge.org/core/journals/oryx/article/availability-of-resting-and-pupping-habitat-for-the-critically-endangered-mediterranean-monk-seal-monachus-monachus-in-the-archipelago-of-madeira/26FDF046B0B81D1A3DC707E722174931) - Availability of resting and pupping habitat for the Mediterranean monk seal in the Archipelago of Madeira
-
-See [Seal Agent Documentation](docs/seal_agent_documentation.md) for complete parameter validation.
-
----
-
-## 🔭 Seeking Guidance
-
-This model is an independent open-science effort and I actively seek feedback from researchers and practitioners. If you work with monk seals, ocean data, or agent-based ecology, your input would be invaluable:
-
-### Behavioural Parameter Validation
-
-The current parameters are drawn from published literature but many are uncertain or Madeira-specific. Would love expert review on:
-
-- **Tide thresholds** — `low_tide_m` (−0.30 m) and `high_tide_m` (+0.30 m) above mean sea level control cave access and haul-out timing. These are placeholders: at what tide height do the Desertas cave beaches flood or become accessible?
-- **Storm swell** — above `max_landing_swell` (4 m) seals cannot land and are washed off land (`storm_blocks_landing`, `storm_wash_off`; both can be switched off). What swell actually floods the cave beaches?
-- **Energy budgets** — `rmr = 1,056 kJ/h` (1.20× Kleiber for a 300 kg phocid, calibrated against adult survival); does this match your field observations?
-- **Foraging rates** — `shallow_foraging_rate = 3.0 kg/h` at depths < 50 m; are these realistic for Madeira's prey community?
-
-### Activity Pattern Validation
-
-Do the simulated activity budgets (time spent foraging / resting / hauling out per day) match any telemetry or observation data for the Madeira population?
-
-### Model Extensions
-
-- **Greece / Cabo Blanco populations** — the model uses a `SealConfig` dataclass that makes porting to new populations straightforward. Happy to collaborate on calibrating parameters for other subpopulations.
-- **Pup and juvenile dynamics** — agents have an age and sex, but there are no births and no age-specific behaviour yet; adding them is a planned future direction.
-- **Human disturbance** — the male risk feature is a stub; incorporating tourism pressure or fishing interaction data would strengthen demographic projections.
-
-If any of these resonate with your work, feel free to [open an issue](https://github.com/alex-kolmakov/seal-of-approval/issues) or reach out directly.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Run tests (`uv run pytest`)
-5. Run linting (`uv run ruff check --fix`)
-6. Commit your changes (`git commit -m 'Add amazing feature'`)
-7. Push to the branch (`git push origin feature/amazing-feature`)
-8. Open a Pull Request
-
----
-
-## 🙏 Acknowledgments
-
-- **Copernicus Marine Service** for oceanographic data
-- **IFCN Madeira** (Instituto das Florestas e Conservação da Natureza) and its monk seal programme, whose published field work this model draws on
-
----
-
-<p align="center">
-  Made with ❤️ for monk seal conservation
-</p>
+Supports priorities 1 (protecting and restoring ocean health) and 3 (coastal and island communities, outermost regions) of the [European Ocean Pact](https://oceans-and-fisheries.ec.europa.eu/european-ocean-pact_en).
