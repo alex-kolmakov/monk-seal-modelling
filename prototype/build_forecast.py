@@ -17,7 +17,7 @@ HERE = Path(__file__).parent
 DATA = HERE.parent / "data" / "forecast"
 TIDE_DATUM_M = -0.25  # same as src.simulation.environment.TIDE_DATUM_M
 # wave tile each cave reads, as an offset (deg) from the cave toward open sea: the closest all-sea tile past the shelf
-CAVES = (("Tabaqueiro", "south-west", "CAVE_TABAQUEIRO", (-0.02, -0.03)), ("Bufador", "east", "CAVE_BUFADOR", (0.0, 0.04)))
+CAVES = (("Tabaqueiro", "south-west", "CAVE_TABAQUEIRO", (-0.02, -0.045)), ("Bufador", "east", "CAVE_BUFADOR", (0.0, 0.04)))
 
 
 def load_env():
