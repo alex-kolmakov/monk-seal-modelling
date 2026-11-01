@@ -17,11 +17,12 @@ app = marimo.App(width="full")
 def _config():
     import os
     import sys
+    from datetime import datetime
+    from pathlib import Path
+
+    import marimo as mo
     import pandas as pd
     import plotly.express as px
-    import marimo as mo
-    from pathlib import Path
-    from datetime import datetime
 
     # ══════════════════════════════════════════════════════════════════════════
     # CONFIG — edit these values
