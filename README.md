@@ -48,8 +48,12 @@
 A web page built on this model for the Copernicus Marine Hackathon 2026. It turns the Copernicus Marine IBI wave and sea-level forecast into hourly visit windows for the two Desertas breeding caves, up to 8 days ahead, and runs the digital colony on the same forecast to show how it copes with a storm. See [docs/forecast_page.md](docs/forecast_page.md).
 
 ```bash
+cp .env.example .env                # Copernicus login and the two cave positions (kept out of the repo)
+uv run python prototype/fetch_forecast.py && uv run python prototype/build_forecast.py
 uv run python prototype/serve.py   # then open http://localhost:8765
 ```
+
+The page, silent screen recordings: [green cave visit windows in a calm week](docs/media/forecast-green-cave-windows.mp4) and [red storm-week replay](docs/media/forecast-red-storm-replay.mp4).
 
 ---
 
