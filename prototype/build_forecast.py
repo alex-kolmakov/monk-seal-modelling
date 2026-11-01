@@ -1,11 +1,13 @@
 """Export the Copernicus IBI forecast at the two Desertas caves to prototype/forecast.js.
 
 Reads data/forecast/waves_anfc.nc (VHM0, VMDR, VHM0_SW1, VMDR_SW1) and zos_anfc.nc written by
-fetch_forecast.py; tide = zos - TIDE_DATUM_M. Land mask: the EMODnet file the model uses. Cave positions: Tabaqueiro = south-west coast, Bufador = east coast of Deserta Grande, taken from
-that land mask. They are placed on the coast by rule, not surveyed.
+fetch_forecast.py; tide = zos - TIDE_DATUM_M.
+
+Cave positions are not in the repository. Set CAVE_TABAQUEIRO and CAVE_BUFADOR to "lat,lon" in the
+environment or in the repo .env (see .env.example). forecast.js holds them, so it is not committed.
 """
 import json
-from collections import deque
+import os
 from pathlib import Path
 
 import numpy as np
@@ -13,39 +15,30 @@ import xarray as xr
 
 HERE = Path(__file__).parent
 DATA = HERE.parent / "data" / "forecast"
-EMODNET = HERE.parent / "data" / "real_long" / "bathymetry_emodnet.nc"  # made by src.data_ingestion.download_bathymetry
 TIDE_DATUM_M = -0.25  # same as src.simulation.environment.TIDE_DATUM_M
+# wave tile each cave reads, as an offset (deg) from the cave toward open sea: the closest all-sea tile past the shelf
+CAVES = (("Tabaqueiro", "south-west", "CAVE_TABAQUEIRO", (-0.02, -0.03)), ("Bufador", "east", "CAVE_BUFADOR", (0.0, 0.04)))
 
 
-def land_mask():
-    """Land (elevation >= 0) on the 0.4 km EMODnet grid around Madeira and the Desertas, row 0 = north."""
-    lon0, lon1, lat0, lat1 = -17.3, -16.2, 32.3, 32.95
-    with xr.open_dataset(EMODNET) as ds:
-        elev = ds["elevation"].sel(lat=slice(lat0, lat1), lon=slice(lon0, lon1)).load()
-    return (elev.values >= 0)[::-1], (lon0, lon1, lat0, lat1)
+def load_env():
+    env = HERE.parent / ".env"
+    if env.exists():
+        for line in env.read_text().splitlines():
+            if "=" in line and not line.lstrip().startswith("#"):
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip().strip("'\""))
 
 
-def deserta_grande_cells(land):
-    h, w = land.shape
-    lab = -np.ones((h, w), int)
-    comps = []
-    for y in range(h):
-        for x in range(w):
-            if land[y, x] and lab[y, x] < 0:
-                q, cells = deque([(y, x)]), []
-                lab[y, x] = len(comps)
-                while q:
-                    a, b = q.popleft()
-                    cells.append((a, b))
-                    for dy in (-1, 0, 1):
-                        for dx in (-1, 0, 1):
-                            yy, xx = a + dy, b + dx
-                            if 0 <= yy < h and 0 <= xx < w and land[yy, xx] and lab[yy, xx] < 0:
-                                lab[yy, xx] = len(comps)
-                                q.append((yy, xx))
-                comps.append(cells)
-    east = [c for c in comps if len(c) > 60 and np.mean([x for _, x in c]) > 150]  # not Madeira
-    return max(east, key=len)
+def cave_positions():
+    """[(name, side, lat, lon, offset)] from the environment; fails with the variable name when unset."""
+    out = []
+    for name, side, var, off in CAVES:
+        raw = os.environ.get(var)
+        if not raw:
+            raise SystemExit(f"{var} is not set: put '{var}=lat,lon' in .env (cave positions are not committed)")
+        lat, lon = (float(x) for x in raw.split(","))
+        out.append((name, side, lat, lon, off))
+    return out
 
 
 def nearest_ocean(da, lat, lon):
@@ -58,20 +51,8 @@ def nearest_ocean(da, lat, lon):
 
 
 def main():
-    land, (lon0, lon1, lat0, lat1) = land_mask()
-    h, w = land.shape
-    cells = np.array(deserta_grande_cells(land))
-    ys, xs = cells[:, 0], cells[:, 1]
-    south = ys > ys.min() + 0.6 * (ys.max() - ys.min())
-    mid = (ys > ys.min() + 0.25 * (ys.max() - ys.min())) & (ys < ys.min() + 0.75 * (ys.max() - ys.min()))
-    sw = np.where(south)[0][xs[south].argmin()]
-    e = np.where(mid)[0][xs[mid].argmax()]
-    lat = lambda y: lat1 - (y + 0.5) * (lat1 - lat0) / h
-    lon = lambda x: lon0 + (x + 0.5) * (lon1 - lon0) / w
-    caves = [
-        dict(name="Tabaqueiro", side="south-west", lat=lat(ys[sw]), lon=lon(xs[sw]), off=(-0.02, -0.03)),
-        dict(name="Bufador", side="east", lat=lat(ys[e]), lon=lon(xs[e]), off=(0.0, 0.04)),
-    ]
+    load_env()
+    caves = cave_positions()
     waves = xr.open_dataset(DATA / "waves_anfc.nc")
     zos = xr.open_dataset(DATA / "zos_anfc.nc")["zos"]
     # IBI waves and IBI physics (zos) are separate products with different horizons; keep the common span
@@ -79,18 +60,18 @@ def main():
     waves, zos = waves.isel(time=slice(0, n)), zos.isel(time=slice(0, n))
     assert (zos.time.values == waves.time.values).all(), "wave and tide time axes differ"
     out = {"start": str(waves.time.values[0])[:13], "hours": n, "has_dir": True, "has_swell": True, "caves": []}
-    for c in caves:
-        la, lo = c["lat"] + c["off"][0], c["lon"] + c["off"][1]
+    for name, side, lat, lon, off in caves:
+        la, lo = lat + off[0], lon + off[1]
         hs, td = nearest_ocean(waves["VHM0"], la, lo), nearest_ocean(zos, la, lo)
         fill = lambda da: da.interpolate_na("time").values
-        rec = dict(name=c["name"], side=c["side"], lat=round(c["lat"], 4), lon=round(c["lon"], 4),
+        rec = dict(name=name, side=side, lat=round(lat, 4), lon=round(lon, 4),
                    wave_px=[round(float(hs.latitude), 3), round(float(hs.longitude), 3)],
                    hs=np.round(fill(hs), 2).tolist(), tide=np.round(fill(td) - TIDE_DATUM_M, 2).tolist(),
                    dir=np.round(fill(nearest_ocean(waves["VMDR"], la, lo))).astype(int).tolist(),
                    sw=np.round(fill(nearest_ocean(waves["VHM0_SW1"], la, lo)), 2).tolist(),
                    swdir=np.round(fill(nearest_ocean(waves["VMDR_SW1"], la, lo))).astype(int).tolist())
         out["caves"].append(rec)
-        print(c["name"], rec["lat"], rec["lon"], "wave pixel", rec["wave_px"], "Hs max", max(rec["hs"]))
+        print(name, "wave pixel", rec["wave_px"], "Hs max", max(rec["hs"]))
     (HERE / "forecast.js").write_text("// Copernicus IBI forecast, generated by build_forecast.py\nwindow.FORECAST=" + json.dumps(out, separators=(",", ":")) + ";\n")
     print("forecast.js", (HERE / "forecast.js").stat().st_size // 1024, "KB")
 

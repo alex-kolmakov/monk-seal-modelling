@@ -42,12 +42,14 @@ Seals are forced out of the caves at waves of about 2.25 m (the coordinator said
 The wave grid is about 2.6 × 3.1 km, so one tile is bigger than a cave. Each cave reads the closest
 tile that is fully sea, in the direction away from the island, past the shelf. EMODnet picks the
 tile (the shelf is about 10-30 m deep there; the 3 km Copernicus floor has 150-220 m). Cave
-positions are placed by rule on the coast of Deserta Grande (south-west and east), not surveyed.
+positions are not in this repository: set `CAVE_TABAQUEIRO` and `CAVE_BUFADOR` (`lat,lon`) in `.env` (see
+`.env.example`). They are only used to pick each cave's wave tile and to draw the page, and end up in the generated,
+uncommitted `prototype/forecast.js`.
 
 ## Run it
 
 ```bash
-export COPERNICUS_USERNAME=... COPERNICUS_PASSWORD=...
+cp .env.example .env                          # fill in the Copernicus login and the two cave positions
 uv run python prototype/fetch_forecast.py     # waves and tide -> data/forecast/*.nc
 uv run python prototype/build_forecast.py     # -> prototype/forecast.js
 uv run python prototype/serve.py              # http://localhost:8765, runs the seal model on demand

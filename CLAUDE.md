@@ -75,7 +75,7 @@ uv run python -m src.visualization.weather_visualizer --physics <nc> --waves <nc
 
 ## Forecast page
 
-`prototype/` holds the Seal of Approval page (Copernicus IBI forecast to cave visit windows, plus a live seal run). See `docs/forecast_page.md`.
+`prototype/` holds the Seal of Approval page (Copernicus IBI forecast to cave visit windows, plus a live seal run). See `docs/forecast_page.md`. Cave coordinates must never be committed: they come from `CAVE_TABAQUEIRO` / `CAVE_BUFADOR` in `.env`, and `prototype/forecast.js` (which holds them) is generated and ignored.
 
 ## Study Area
 
