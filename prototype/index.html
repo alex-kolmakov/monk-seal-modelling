@@ -15,8 +15,8 @@ body{display:flex;flex-direction:column;padding:8px 12px;gap:6px;overflow:hidden
 h1{font-size:calc(17px*var(--s));margin:0}
 header{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 14px}
 header .sub{color:var(--dim)}
-.badge{font-size:11px;border:1px solid var(--blue);color:var(--blue);border-radius:10px;padding:0 8px}
-.layout{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:10px}
+.badge{font-size:calc(12px*var(--s));border:1px solid var(--blue);color:var(--blue);border-radius:10px;padding:0 8px}
+.layout{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) calc(300px*var(--s));grid-template-rows:auto minmax(0,1fr);gap:10px}
 main{min-height:0;display:flex;flex-direction:column;gap:5px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
 #mapcard{flex:1;min-height:180px;display:flex;flex-direction:column;padding:8px}
@@ -97,29 +97,63 @@ details summary{cursor:pointer}
 /* ---------- wide screens: scale type and the side column up so the page uses the room ---------- */
 @media (min-width:1700px){:root{--s:1.15}}
 @media (min-width:2200px){:root{--s:1.3}}
+
+/* ---------- layout: map and timeline left; the visit windows (the answer) top right ---------- */
+main{grid-row:1 / 3}
+#winsec{grid-column:2;grid-row:1;min-height:0;overflow:auto}
+aside{grid-column:2;grid-row:2}
+#winsec h2{font-size:calc(12px*var(--s));margin:0 0 4px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
+.winday{margin-top:6px}
+details.more{margin:6px 0 0}
+details.more>summary{color:var(--blue);font-size:calc(13px*var(--s));padding:8px 0}
+#legbox{margin:0;font-size:inherit;color:inherit}
+#legbox>summary{display:none}
+.day .dw{display:none}
 #tl{touch-action:pan-y}  /* horizontal drags scrub the timeline; vertical swipes still scroll the page */
-/* phone (portrait or landscape) and small tablet: one column, the page scrolls, touch-sized controls */
+#tip{position:fixed;z-index:20;display:none;pointer-events:none;background:#101418;border:1px solid var(--line);border-radius:6px;padding:6px 9px;font-size:calc(12px*var(--s));line-height:1.45;white-space:nowrap}
+#tip b{font-weight:600}
+
+/* ---------- phone (portrait or landscape) and small tablet ----------
+   One column. Order: the answer (visit windows), the map, conditions now, controls, a day picker, then ONE day
+   of the timeline at full width. Touch targets are at least 44 px. */
 @media (max-width:820px),(max-height:500px){
   html,body{height:auto}
-  body{overflow:auto;padding:8px 10px}
+  body{overflow:auto;padding:8px 10px 84px}   /* room for the fixed control bar */
   header .sub{flex-basis:100%}
-  .layout{display:flex;flex-direction:column;gap:8px}
-  main{gap:8px}
+  .layout{display:flex;flex-direction:column;gap:10px}
+  #winsec{order:-1;overflow:visible}
+  main{gap:10px}
+  aside{overflow:visible}
   #mapcard{flex:none;min-height:0}
   #mapbox{flex-direction:column;gap:8px}
   #mapslot{order:-1;flex:none;width:100%}
   #info{width:100%;overflow:visible}
-  aside{overflow:visible}
   #windows{max-height:none}
-  #controls{flex-wrap:wrap}
+  .win{padding:11px 12px;font-size:calc(15px*var(--s))}
+  .win span{font-size:calc(13px*var(--s))}
+  #legbox>summary{display:block;padding:8px 0;color:var(--dim);cursor:pointer}
+  /* controls stay pinned to the bottom edge so Play and the clock are always in reach while you look at the map */
+  #controls{position:fixed;left:0;right:0;bottom:0;z-index:6;flex-wrap:wrap;background:var(--bg);margin:0;padding:8px 10px calc(8px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
   #controls .hint{display:none}
-  #clock{margin-left:auto}
-  button,select{min-height:40px;font-size:16px;padding:6px 14px}  /* 16px: Chrome and iOS do not zoom on focus */
-  .win{padding:9px 10px;font-size:14px}
-  .row input[type=number]{font-size:16px;padding:6px}
-  label.chk{font-size:14px;min-height:36px}
-  details summary{padding:6px 0}
+  #clock{flex:1;margin:0;text-align:right;white-space:nowrap;font-size:calc(15px*var(--s))}
+  #controls button,#controls select{padding:6px 12px}
+  button,select{min-height:44px;font-size:16px;padding:6px 16px}  /* 16px: no zoom-on-focus in Chrome or iOS */
+  .row input[type=number]{font-size:16px;padding:8px}
+  .wx .k small{display:block;margin:0}
+  label.chk{min-height:40px}
+  details summary{padding:8px 0}
   .credits img{max-width:100%;height:auto}
+  /* day picker: a scrolling row of big chips, each with its window count */
+  #days{display:flex!important;gap:6px;margin:0!important;overflow-x:auto;scroll-snap-type:x proximity;padding-bottom:4px}
+  .day{flex:0 0 68px;min-height:56px;scroll-snap-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:calc(13px*var(--s))}
+  .day .dw{display:block;color:var(--dim);font-size:calc(12px*var(--s))}
+  .day .dw.has{color:var(--green);font-weight:600}
+  .day.on{background:#2e2e2e}
+}
+@media (max-width:380px){
+  #controls{gap:4px;padding-left:8px;padding-right:8px}
+  #controls button,#controls select{padding:6px 8px}
+  #clock{font-size:calc(13px*var(--s))}
 }
 </style>
 </head>
@@ -147,6 +181,7 @@ details summary{cursor:pointer}
         </div>
         <div id="mapslot"><canvas id="map"></canvas></div>
       </div>
+      <details id="legbox" open><summary>Legend</summary>
       <div class="legend">
         <span><i style="background:#ececec"></i>resting</span>
         <span><i style="background:var(--blue)"></i>commuting</span>
@@ -156,6 +191,7 @@ details summary{cursor:pointer}
         <span><u style="border-color:var(--blue)"></u>swell</span>
         <span><i style="background:rgba(88,196,221,.45)"></i>sea the seals can use</span>
       </div>
+      </details>
     </div>
 
     <div id="controls">
@@ -174,10 +210,12 @@ details summary{cursor:pointer}
     <canvas id="tl"></canvas>
   </main>
 
-  <aside class="card">
+  <section class="card" id="winsec">
     <h2>Visit windows</h2>
     <div id="windows"></div>
+  </section>
 
+  <aside class="card">
     <h2>Seals</h2>
     <div id="simbox">
       <button id="simgo" title="Download the latest forecast inputs and run the real agent-based model on them">Load data and simulate seals</button>
@@ -501,8 +539,8 @@ function drawMap(t){
       for(const o of [0,0.5]){const q=(ph+o)%1;mctx.strokeStyle=`rgba(131,193,103,${0.85*(1-q)})`;mctx.lineWidth=2.5*mdpr;mctx.beginPath();mctx.arc(cx,cy,(8+30*q)*mdpr,0,6.283);mctx.stroke()}
       mctx.fillStyle="#83C167";mctx.beginPath();mctx.arc(cx,cy,6*mdpr,0,6.283);mctx.fill()}
     else{mctx.strokeStyle="rgba(236,236,236,.9)";mctx.lineWidth=1.5*mdpr;mctx.beginPath();mctx.arc(cx,cy,5*mdpr,0,6.283);mctx.stroke()}
-    const west=ci===0;
-    labelPill(west?cx-16*mdpr:cx+16*mdpr,west?cy+26*mdpr:cy-26*mdpr,west?"right":"left","#ececec",w?"#83C167":null,
+    const west=ci===0, off=(mq.matches?40:28)*mdpr*UI;   // vertical gap between a cave marker and its label
+    labelPill(west?cx-16*mdpr:cx+16*mdpr,west?cy+off:cy-off,west?"right":"left","#ececec",w?"#83C167":null,
       [c.name,`${hs.toFixed(1)} m from ${compass(dir)}`,w?`visit until ${hhmm(w.b)}`:null],dir);
   });
   mctx.textAlign="left";
@@ -628,19 +666,29 @@ const caveTag=cis=>cis.length===NC?`<em>both caves</em>`:cis.map(ci=>`<em style=
 function renderWindows(){
   const host=$("windows");host.innerHTML="";
   if(!windows.length){host.innerHTML='<div class="empty">No window in the forecast with these rules.</div>';return}
-  let lastDay=-1;
-  for(const w of mergedWindows()){
-    if(w.day!==lastDay){const h=document.createElement("div");h.className="winday";h.textContent=dayLabel(w.day);host.appendChild(h);lastDay=w.day}
+  const list=mergedWindows(), LIM=mq.matches?3:Infinity;
+  let lastDay=-1, target=host;
+  list.forEach((w,i)=>{
+    if(i===LIM){const dt=document.createElement("details");dt.className="more";const sm=document.createElement("summary");
+      sm.textContent=`${list.length-LIM} more window${list.length-LIM>1?"s":""}`;dt.appendChild(sm);host.appendChild(dt);target=dt;lastDay=-1}
+    if(w.day!==lastDay){const h=document.createElement("div");h.className="winday";h.textContent=dayLabel(w.day);target.appendChild(h);lastDay=w.day}
     const el=document.createElement("div");el.className="win";el.dataset.ids=w.ids.join(",");
     el.innerHTML=`<b>${hhmm(w.a)} to ${hhmm(w.b)}</b>${caveTag(w.cis)}<span>${+(w.b-w.a).toFixed(2)} h</span>`;
-    el.onclick=()=>{T=w.a};host.appendChild(el)}
+    el.onclick=()=>{T=w.a};target.appendChild(el)});
 }
 function renderDays(){
-  const host=$("days");host.innerHTML="";host.style.gridTemplateColumns=dayEdges.slice(1).map((e,i)=>`${e-dayEdges[i]}fr`).join(" ");host.style.margin=`0 ${PADR}px 0 ${PADL}px`;
+  const host=$("days");host.innerHTML="";
+  if(mq.matches){host.style.gridTemplateColumns="";host.style.margin=""}
+  else{host.style.gridTemplateColumns=dayEdges.slice(1).map((e,i)=>`${e-dayEdges[i]}fr`).join(" ");host.style.margin=`0 ${PADR}px 0 ${PADL}px`}
+  const wins=mergedWindows();
   for(let d=0;d<NDAYS;d++){
-    const el=document.createElement("div");el.className="day";el.dataset.d=d;el.textContent=dayLabel(d);
+    const n=wins.filter(w=>w.day===d).length;
+    const el=document.createElement("div");el.className="day";el.dataset.d=d;
+    el.innerHTML=`<span>${dayLabel(d)}</span><span class="dw${n?" has":""}">${n?`● ${n} window${n>1?"s":""}`:"none"}</span>`;
     el.onclick=()=>{T=Math.max(dayEdges[d],NOW)};host.appendChild(el)}
+  lastDayShown=-1;
 }
+let lastDayShown=-1;
 function recompute(reroute){
   if(reroute){buildRoutes();buildOverlay()}
   evaluate();buildSeals();renderWindows();renderDays();
@@ -752,6 +800,7 @@ function frame(now){
   renderWx(counts);renderColony(T);
   const cur=openWindow(T);
   document.querySelectorAll(".day").forEach(e=>e.classList.toggle("on",+e.dataset.d===day));
+  if(mq.matches&&day!==lastDayShown){lastDayShown=day;const dh=$("days"),el=dh.querySelector(".day.on");if(el)dh.scrollTo({left:el.offsetLeft-(dh.clientWidth-el.offsetWidth)/2,behavior:"smooth"})}
   document.querySelectorAll(".win").forEach(e=>e.classList.toggle("on",!!cur&&e.dataset.ids.split(",").includes(String(cur.id))));
   requestAnimationFrame(frame);
 }
@@ -762,7 +811,10 @@ $("badge").textContent=`Copernicus IBI forecast, ${fmtDay.format(at(0))} to ${fm
 $("fc-info").textContent=`Hourly waves, swell and tide from the Copernicus IBI forecast models, ${NH/24} days from ${fmtDay.format(at(0))}. Times are Madeira local time.`;
 T=NOW;recompute(false);
 resizeMap();resizeTl();
-window.addEventListener("resize",()=>{resizeMap();resizeTl()});
+$("legbox").open=!mq.matches;$("today").textContent=mq.matches?"Now":"Jump to now";
+const relayout=()=>{$("today").textContent=mq.matches?"Now":"Jump to now";const old=PADL+"/"+mq.matches;applyTlScale();if(old!==PADL+"/"+mq.matches){renderWindows();renderDays()}resizeMap();resizeTl()};
+window.addEventListener("resize",relayout);
+mq.addEventListener("change",()=>{$("legbox").open=!mq.matches;relayout()});
 new ResizeObserver(()=>resizeMap()).observe($("mapslot"));
 $("play").onclick=()=>{playing=!playing;$("play").textContent=playing?"Pause":"Play"};
 $("speed").onchange=e=>rate=+e.target.value;
