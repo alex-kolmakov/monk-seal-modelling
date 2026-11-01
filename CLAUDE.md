@@ -73,6 +73,10 @@ uv run python -m src.visualization.weather_visualizer --physics <nc> --waves <nc
 - `SealState` enum for FSM states (not strings)
 - Google-style docstrings
 
+## Forecast page
+
+`prototype/` holds the Seal of Approval page (Copernicus IBI forecast to cave visit windows, plus a live seal run). See `docs/forecast_page.md`.
+
 ## Study Area
 
-Madeira Archipelago download box: 32.2-33.5°N, 17.5-16.0°W. 1-hour timesteps. The real colony is ~27 seals (Pires et al. 2023).
+Madeira Archipelago download box: 32.2-33.5°N, 17.5-16.0°W. 1-hour timesteps. The real colony was 27 seals in 2021 (Pires et al. 2023); a regional government statement of 20 May 2026 puts it at about 30.

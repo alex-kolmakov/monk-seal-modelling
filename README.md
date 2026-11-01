@@ -43,6 +43,16 @@
 
 ---
 
+## 🌊 Seal of Approval: cave visit forecast
+
+A web page built on this model for the Copernicus Marine Hackathon 2026. It turns the Copernicus Marine IBI wave and sea-level forecast into hourly visit windows for the two Desertas breeding caves, up to 8 days ahead, and runs the digital colony on the same forecast to show how it copes with a storm. See [docs/forecast_page.md](docs/forecast_page.md).
+
+```bash
+uv run python prototype/serve.py   # then open http://localhost:8765
+```
+
+---
+
 ## 🎬 Examples
 
 <table>
@@ -177,6 +187,14 @@ monk-seal-modelling/
 │   │   ├── config.py            # Animation settings
 │   │   └── data_loader.py
 │
+├── 📂 prototype/                # Seal of Approval forecast page
+│   ├── index.html               # the page
+│   ├── serve.py                 # static server + on-demand seal run
+│   ├── fetch_forecast.py        # Copernicus IBI waves and tide
+│   ├── build_forecast.py        # writes forecast.js
+│   ├── simulate_forecast.py     # seal model on the forecast
+│   └── build_bathymetry.py      # EMODnet depth grid for the page
+│
 ├── 📂 notebooks/
 │   └── explore.py               # marimo notebook (recommended entry point)
 │
@@ -204,6 +222,7 @@ monk-seal-modelling/
 | [Model Parameters & Tuning](docs/model_parameters.md) | Configuration reference and how to adjust parameters |
 | [Data Retrieval Guide](docs/copernicus_data_discovery.md) | Copernicus datasets, download process, tidal integration |
 | [Visualization Guide](docs/visualization_guide.md) | Animation tools and troubleshooting |
+| [Forecast Page](docs/forecast_page.md) | The Seal of Approval cave visit forecast: data, rules, how to run, limits |
 
 ---
 
