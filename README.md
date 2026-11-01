@@ -14,10 +14,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/media/poster.png" alt="I won. Seal of Approval, Copernicus Marine Hackathon 2026" width="100%">
+  <img src="docs/media/poster.png" alt="Winner of the Copernicus Marine Service Hackathon 2026: Seal of Approval" width="100%">
 </p>
 
-Fewer than 40 Mediterranean monk seals live around Madeira and depend on two caves on the Desertas. The programme team that looks after them has had to plan cave visits (camera maintenance, colony risk assessment) without a forecast. Seal of Approval turns the Copernicus Marine IBI wave and sea-level forecast into **hourly visit windows for each cave, up to 8 days ahead**, and runs a colony of digital seals on the same forecast to show how it copes with a storm. Built for the Copernicus Marine Hackathon 2026.
+Fewer than 40 Mediterranean monk seals live around Madeira and depend on two caves on the Desertas. The programme team that looks after them has had to plan cave visits (camera maintenance, colony risk assessment) without a forecast. Seal of Approval turns the Copernicus Marine IBI wave and sea-level forecast into **hourly visit windows for each cave, up to 8 days ahead**, and runs a colony of digital seals on the same forecast to show how it copes with a storm. Built for the Copernicus Marine Service Hackathon 2026.
 
 ## The page
 
