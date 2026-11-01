@@ -861,6 +861,16 @@ let drag=false;
 tl.addEventListener("pointerdown",e=>{drag=true;tl.setPointerCapture(e.pointerId);T=tlTime(e)});
 tl.addEventListener("pointermove",e=>{if(drag)T=tlTime(e)});
 tl.addEventListener("pointerup",()=>drag=false);
+const tip=document.createElement("div");tip.id="tip";document.body.appendChild(tip);
+tl.addEventListener("pointermove",e=>{
+  if(e.pointerType!=="mouse"){tip.style.display="none";return}
+  const t=tlTime(e);
+  const rows=CAVES.map((c,ci)=>{const w=openWindow(t,ci);return `<b style="color:${CCOL[ci]}">${c.name}</b> waves ${hourly(c.hs,t).toFixed(1)} m`+(HAS_SW?`, swell ${hourly(c.sw,t).toFixed(1)} m`:"")+(w?` <span style="color:var(--green)">· window until ${hhmm(w.b)}</span>`:"")});
+  tip.innerHTML=`<b>${dayLabel(dayOf(t))} ${hhmm(t)}</b><br>${rows.join("<br>")}<br>Tide ${hourly(CAVES[0].tide,t).toFixed(2)} m`;
+  tip.style.display="block";
+  tip.style.left=Math.max(8,Math.min(e.clientX+14,innerWidth-tip.offsetWidth-8))+"px";
+  tip.style.top=Math.max(8,e.clientY-tip.offsetHeight-14)+"px"});
+tl.addEventListener("pointerleave",()=>tip.style.display="none");
 {const q=new URLSearchParams(location.search);if(q.has("t"))T=clamp(+q.get("t"),0,NH-1);if(q.has("pause")){playing=false;$("play").textContent="Play"}}
 requestAnimationFrame(frame);
 </script>
