@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="docs/media/poster.png" alt="Seal of Approval, Copernicus Marine Hackathon 2026" width="520">
-</p>
-
 <h1 align="center">🦭 Seal of Approval</h1>
 
 <p align="center">
@@ -21,13 +17,24 @@ Fewer than 40 Mediterranean monk seals live around Madeira and depend on two cav
 
 ## The page
 
-| A calm week: green = the cave can be visited | A storm week, replayed: red = closed, seals under strain |
-|---|---|
-| <img src="docs/media/ui-calm-week.png" alt="Forecast page, calm week with green visit windows"> | <img src="docs/media/ui-storm-replay.png" alt="Forecast page, storm-week replay with red closed blocks"> |
+**A calm week.** Green marks mean the cave can be visited. The list on the right gives each window with its length.
 
-Silent screen recordings: [calm week](docs/media/forecast-green-cave-windows.mp4) · [storm replay](docs/media/forecast-red-storm-replay.mp4).
+<p align="center"><img src="docs/media/forecast-green-cave-windows.gif" alt="Forecast page in a calm week: green visit windows for both caves" width="100%"></p>
 
-A cave is open in an hour when waves are below 1 m, the tide is low, and swell does not come from the cave's bad side. Each cave reads the closest all-sea wave tile, picked with EMODnet bathymetry. Details, thresholds and limits: [docs/forecast_page.md](docs/forecast_page.md).
+**A storm week, replayed (1 to 8 Feb 2026).** Red blocks mean the sea is high enough to force seals out of the cave. The same forecast drives the digital seals, and the colony table shows how they cope.
+
+<p align="center"><img src="docs/media/forecast-red-storm-replay.gif" alt="Forecast page replaying a storm week: red forced-out blocks and the colony condition table" width="100%"></p>
+
+### How to read it
+
+- **Left panel, per cave:** wave height, wave direction (with its bad sector) and tide now, each ticked when it is within the rule, and when the current window ends.
+- **Timeline under the map:** one row per cave. Green is a visit window, where all three rules hold. Red is a stretch when waves and tide are high enough to force seals out of the cave (the "forced out" line, about 2.25 m of waves). Below it are the wave height, swell height and tide curves the rules come from.
+- **Map:** the two caves with their wave tile's current reading, and the digital seals (white resting, blue commuting, yellow foraging). The bright blue band is the sea the seals can use.
+- **Colony condition (storm replay):** energy buffer, energy balance per day, body mass and each seal's state. The header says "Seals do not approve" when the colony's mean energy balance over the last 48 h is 4.5 MJ per seal per day or more below the run's usual level, which is what the Jan-May 2026 storm spells looked like.
+
+A cave is open in an hour when waves are below 1 m, the tide is low, and swell does not come from the cave's bad side. Each cave reads the closest all-sea wave tile, picked with EMODnet bathymetry. The numbers (all editable on the page), their sources and the limits are in [docs/forecast_page.md](docs/forecast_page.md). The thresholds marked "call" come from the programme coordinator and have only one field check behind them.
+
+Stills: [calm week](docs/media/ui-calm-week.png) · [storm replay](docs/media/ui-storm-replay.png).
 
 ```bash
 git clone https://github.com/alex-kolmakov/seal-of-approval.git && cd seal-of-approval
@@ -84,3 +91,9 @@ Many behaviour thresholds are placeholders (tide height at which a cave floods, 
 Data: [Copernicus Marine Service](https://marine.copernicus.eu/) (IBI forecast), [EMODnet Bathymetry](https://emodnet.ec.europa.eu/en/bathymetry). Field knowledge and thresholds: the IFCN Madeira monk seal programme (VECLAM team). Poster photo: Marinko Babić, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0), via [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Monachus_monachus_DSC_0274.jpg); the poster is shared under the same licence.
 
 Supports priorities 1 (protecting and restoring ocean health) and 3 (coastal and island communities, outermost regions) of the [European Ocean Pact](https://oceans-and-fisheries.ec.europa.eu/european-ocean-pact_en).
+
+## Hackathon
+
+<p align="center">
+  <img src="docs/media/poster.png" alt="Seal of Approval, Copernicus Marine Hackathon 2026" width="520">
+</p>
