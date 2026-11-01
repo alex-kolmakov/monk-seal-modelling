@@ -31,3 +31,9 @@ coverage.xml
 
 # Articles (managed in Notion)
 docs/articles/
+
+# marimo session cache
+notebooks/__marimo__/
+
+# Coverage report
+htmlcov/
