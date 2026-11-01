@@ -65,6 +65,8 @@ ignore = []
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]  # Allow assert in tests
+"prototype/*" = ["E501", "N803", "N806", "E731"]  # one-file scripts for the forecast page
+"notebooks/*" = ["E501", "N803", "N806", "E731"]  # marimo cells
 
 
 
@@ -77,4 +79,4 @@ dev = [
 
 [tool.pyrefly]
 python-interpreter-path = ".venv/bin/python3"
-search_path = ["."]
+search_path = [".", "prototype"]

@@ -13,7 +13,7 @@ import json
 import os
 import subprocess
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import copernicusmarine as cm
@@ -49,7 +49,7 @@ def _subset(dataset_id: str, variables: list[str], name: str, start: datetime, e
 def download_inputs(say) -> tuple[date, date]:
     """Fetch the forecast inputs; returns (first day, last day) the model can run over."""
     INPUT_DIR.mkdir(parents=True, exist_ok=True)
-    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     end = today + timedelta(days=11)
     say("Downloading hourly waves")
     _subset("cmems_mod_ibi_wav_anfc_0.027deg_PT1H-i", ["VHM0"], "waves_tmp.nc", today, end)
@@ -128,7 +128,7 @@ def export_tracks(csv_path: Path, first: date, seed: int, path: Path | None = No
             t["k"].append(round(float(r["stomach"]), 1) if r.get("stomach") else None)  # kg in the stomach
     hours = max(len(t["lat"]) for t in tracks.values())
     out = {"start": f"{first:%Y-%m-%d}T00", "hours": hours, "seed": seed, "states": STATES, "lean_mass": 240.0, "max_mass": 400.0, "stomach_cap": 15.0, "seals": list(tracks.values()),
-           "made": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}
+           "made": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")}
     path = path or HERE / "seals.json"
     path.write_text(json.dumps(out, separators=(",", ":")))
     return path
