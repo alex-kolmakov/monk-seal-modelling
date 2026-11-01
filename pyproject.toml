@@ -1,7 +1,7 @@
 [project]
 name = "monkmodelling"
 version = "0.1.0"
-description = "Add your description here"
+description = "Seal of Approval: Copernicus Marine cave-visit forecast and agent-based model for the Madeira monk seal"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

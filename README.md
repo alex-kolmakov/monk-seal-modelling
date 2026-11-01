@@ -2,15 +2,15 @@
   <img src="https://upload.wikimedia.org/wikipedia/commons/5/51/Monachus_monachus_DSC_0274.jpg" alt="Mediterranean Monk Seal" width="600">
 </p>
 
-<h1 align="center">🦭 Madeira Monk Seal ABM</h1>
+<h1 align="center">🦭 Seal of Approval</h1>
 
 <p align="center">
-  <strong>An Agent-Based Model of individual Mediterranean Monk Seal (<em>Monachus monachus</em>) behaviour and energetics in the Madeira Archipelago</strong>
+  <strong>A cave-visit forecast for the Madeira monk seal (<em>Monachus monachus</em>), built on Copernicus Marine data, and the agent-based model behind it</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/alex-kolmakov/monk-seal-modelling/actions/workflows/lint_typecheck_test.yml">
-    <img src="https://github.com/alex-kolmakov/monk-seal-modelling/actions/workflows/lint_typecheck_test.yml/badge.svg" alt="CI Status">
+  <a href="https://github.com/alex-kolmakov/seal-of-approval/actions/workflows/lint_typecheck_test.yml">
+    <img src="https://github.com/alex-kolmakov/seal-of-approval/actions/workflows/lint_typecheck_test.yml/badge.svg" alt="CI Status">
   </a>
   <a href="https://www.python.org/downloads/">
     <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+">
@@ -83,8 +83,8 @@ The page, silent screen recordings: [green cave visit windows in a calm week](do
 ### Installation
 
 ```bash
-git clone https://github.com/alex-kolmakov/monk-seal-modelling.git
-cd monk-seal-modelling
+git clone https://github.com/alex-kolmakov/seal-of-approval.git
+cd seal-of-approval
 uv sync
 ```
 
@@ -166,7 +166,7 @@ uv run python -m src.visualization.weather_visualizer \
 ## 📁 Project Structure
 
 ```
-monk-seal-modelling/
+seal-of-approval/
 ├── 📂 src/
 │   ├── 📂 simulation/           # Core simulation engine
 │   │   ├── 📂 agents/           # Seal agent logic & movement
@@ -305,7 +305,7 @@ Do the simulated activity budgets (time spent foraging / resting / hauling out p
 - **Pup and juvenile dynamics** — agents have an age and sex, but there are no births and no age-specific behaviour yet; adding them is a planned future direction.
 - **Human disturbance** — the male risk feature is a stub; incorporating tourism pressure or fishing interaction data would strengthen demographic projections.
 
-If any of these resonate with your work, feel free to [open an issue](https://github.com/alex-kolmakov/monk-seal-modelling/issues) or reach out directly.
+If any of these resonate with your work, feel free to [open an issue](https://github.com/alex-kolmakov/seal-of-approval/issues) or reach out directly.
 
 ---
 
